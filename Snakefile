@@ -19,7 +19,7 @@ MQ=config["MQ"] ## MQ cutoff for mapped BAMs
 unit_df = pd.read_table(config["units"], comment="#").set_index(["sampleId"], drop=False)
 SAMPLES = unit_df.index.unique()
 
-db_df = pd.read_table(DB + "/library.seqInfo.tsv", comment="#").set_index(["assemblyId"], drop=False)
+db_df = pd.read_table(DB + "/library.seqInfo.tsv").set_index(["assemblyId"], drop=False)
 
 gen_df = pd.read_table(GENFILE, comment="#", header=None)
 GENERA = gen_df[[1]]
@@ -43,7 +43,7 @@ def get_fq(wildcards):
 
 rule all:
     input:
-        expand("stages/{sample}.summary.done", sample = SAMPLES)
+        expand("stages/{sample}.all.done", sample = SAMPLES)
 
           
 ## --------------------------------------------------------------------------------
@@ -88,14 +88,12 @@ rule get_read_ids_classified_nonhuman:
         classfile="classify/{sample}." + PREFIX + ".krakenuniq.class.tsv.gz",
         tax_ids_human=DB + "/taxLists/33208.kingdom.taxIds.txt"
     output:
-        read_ids=temp("tmp/{sample}/classified.readIds.txt.gz")
+        read_ids="tmp/{sample}/classified.readIds.txt.gz"
     benchmark:
         "benchmarks/{sample}/get_read_ids_classified.txt"
-    threads:
-        2
     shell:
         """
-        gzip -cd {input.classfile} | awk 'FNR==NR {{ a[$1]; next }} (!($3 in a) && $1 == "C"){{print $2}}' {input.tax_ids_human} - | pigz -p {threads} > {output.read_ids} 
+        gzip -cd {input.classfile} | awk 'FNR==NR {{ a[$1]; next }} (!($3 in a) && $1 == "C"){{print $2}}' {input.tax_ids_human} - | gzip > {output.read_ids} 
         """
 
 rule get_reads_classified_nonhuman:
@@ -113,35 +111,61 @@ rule get_reads_classified_nonhuman:
         seqkit grep -f {input.read_ids} {input.fq} | pigz -p {threads} > {output.fq} 
         """
 
-checkpoint genera_sample:
+rule get_genera_sample:
     input:
         reportfile="report/{sample}." + PREFIX + ".krakenuniq.report.tsv.gz",
         genfile=GENFILE
     output:
-        directory("tmp/{sample}/genera/")
+        "tmp/{sample}/genera.txt"
     wildcard_constraints:
         genus="\d+"
     params:
         sample="{sample}",
     shell:
         """
-        gzip -cd {input.reportfile} | awk 'FNR==NR {{ a[$1]; next }} ($7 in a && $4 >= {KMERS}){{print >"tmp/{params.sample}/genera/"$7.".id"}}' <(cut -f1 {input.genfile}) - 
+        (gzip -cd {input.reportfile} | awk 'FNR==NR {{ a[$1]; next }} ($7 in a && $4 >= {KMERS}){{print $7"\t"$9}}' <(cut -f1 {input.genfile}) -) > {output}
         """
-
+        
+checkpoint get_assemblies_sample:
+    input:
+        genfile="tmp/{sample}/genera.txt",
+        reportfile="report/{sample}." + PREFIX + ".krakenuniq.report.tsv.gz",
+        tax_ids=DB + "/taxLists/genus.taxIds.tsv.gz",
+        seq_info=DB + "/library.seqInfo.tsv",
+    output:
+        directory("tmp/{sample}/assemblies/"),
+        tax_ids="tmp/{sample}/assemblies/taxIds.txt",
+        assembly_ids="tmp/{sample}/assemblies/assemblyIds.txt",
+        assembly_counts="tmp/{sample}/assemblies/assemblyCounts.txt"
+    params:
+        sample="{sample}",
+    shell:
+        """
+        zcat {input.tax_ids} | awk -F'\\t' 'FNR==NR {{ a[$1]; next }} ($2 in a){{print $4}}' <(cut -f1 {input.genfile}) - > {output.tax_ids}
+        cat {input.seq_info} | awk -F'\\t' 'FNR==NR {{ a[$1]; next }} ($2 in a){{print $1"\\t"$3"\\t"$5}}' {output.tax_ids} - | sort > tmp/{params.sample}/assemblies/assemblyIds.txt
+        gzip -cd {input.reportfile} | awk 'FNR==NR {{ a[$1]; next }} ($7 in a && $8 == "assembly"){{print $9"\\t"$4}}' {output.tax_ids} - | sort > tmp/{params.sample}/assemblies/assemblyCounts.txt
+        if [ -s tmp/{params.sample}/assemblies/assemblyCounts.txt ]
+        then
+           join tmp/{params.sample}/assemblies/assemblyIds.txt tmp/{params.sample}/assemblies/assemblyCounts.txt | sort -k2,2 -rnk3,3 | tr ' ' '\\t' | datamash -g2 first 1 first 3 | awk '{{print >"tmp/{params.sample}/assemblies/"$3"."$2".id"}}'
+        else
+           cat tmp/{params.sample}/assemblies/assemblyIds.txt | awk '{{print $1":"$3"\\t"$2}}' | datamash -g2 rand 1 | tr ':' '\\t' | awk '{{print >"tmp/{params.sample}/assemblies/"$3"."$2".id"}}'
+        fi
+        cat tmp/{params.sample}/assemblies/*.id | cut -f2 | sort | uniq | awk '{{print >"tmp/{params.sample}/assemblies/"$1".assembly"}}'
+        cat tmp/{params.sample}/assemblies/*.id | cut -f3 | sort | uniq | awk '{{print >"tmp/{params.sample}/assemblies/"$1".genus"}}'
+        """
+        
 rule get_read_ids_genus:
     input:
         classfile="classify/{sample}." + PREFIX + ".krakenuniq.class.tsv.gz",
-        genus_ids="tmp/{sample}/genera/{genus}.id",
+        genera="tmp/{sample}/assemblies/{genus}.genus",
         tax_ids=DB + "/taxLists/{genus}.genus.taxIds.txt"
     output:
         read_ids=temp("tmp/{sample}/{genus}.readIds.txt.gz")
     benchmark:
         "benchmarks/{sample}/{genus}.get_read_ids_genus.txt"
-    threads:
-        2
     shell:
         """
-        gzip -cd {input.classfile} | awk 'FNR==NR {{ a[$1]; next }} ($3 in a){{print $2}}' {input.tax_ids} - | pigz -p {threads} > {output.read_ids} 
+        gzip -cd {input.classfile} | awk 'FNR==NR {{ a[$1]; next }} ($3 in a){{print $2}}' {input.tax_ids} - | gzip > {output.read_ids}
         """
 
 rule get_reads_genus:
@@ -152,56 +176,29 @@ rule get_reads_genus:
         fq="fq/{sample}/{genus}.fq.gz"
     benchmark:
         "benchmarks/{sample}/{genus}.get_reads_genus.txt"
-    threads:
-        4
     shell:
         """
-        seqkit grep -f {input.read_ids} {input.fq} | pigz -p {threads} > {output.fq} 
+        seqkit grep -f {input.read_ids} {input.fq} | gzip > {output.fq} 
         """
 
-def aggregate_fqs(wildcards):
-    checkpoint_output = checkpoints.genera_sample.get(**wildcards).output[0]    
-    files = expand("fq/{{sample}}/{genus}.fq.gz", genus = glob_wildcards(os.path.join(checkpoint_output, "{genus}.id")).genus)
-    return files 
+# def aggregate_fqs(wildcards):
+#     checkpoint_output = checkpoints.get_assemblies_sample.get(**wildcards).output[0]    
+#     files = expand("fq/{{sample}}/{genus}.fq.gz", genus = glob_wildcards(os.path.join(checkpoint_output, "{genus}.genus")).genus)
+#     return files 
 
-rule fqs_collect:
-    input:
-        aggregate_fqs
-    output:
-        stamp = "stages/{sample}.fqs.done"
-    shell:
-        """
-        touch {output}
-        """
-
-checkpoint assemblies_genus:
-    input:
-        reportfile="report/{sample}." + PREFIX + ".krakenuniq.report.tsv.gz",
-        tax_ids=DB + "/taxLists/{genus}.genus.taxIds.txt",
-        seq_info=DB + "/library.seqInfo.tsv",
-    output:
-        directory("tmp/{sample}/assemblies/{genus}/")
-    wildcard_constraints:
-        genus="\d+"
-    params:
-        sample="{sample}",
-        genus="{genus}"
-    shell:
-        """
-        cat {input.seq_info} | awk 'FNR==NR {{ a[$1]; next }} ($2 in a){{print $1"\\t"$3}}' {input.tax_ids} - | sort > tmp/{params.sample}/assemblies/{params.genus}/assembly_ids.txt
-        gzip -cd {input.reportfile} | awk 'FNR==NR {{ a[$1]; next }} ($7 in a && $8 == "assembly"){{print $9"\\t"$4}}' {input.tax_ids} - | sort > tmp/{params.sample}/assemblies/{params.genus}/assembly_counts.txt       
-        if [ -s tmp/{params.sample}/assemblies/{params.genus}/assembly_counts.txt ]
-        then
-           join tmp/{params.sample}/assemblies/{params.genus}/assembly_ids.txt tmp/{params.sample}/assemblies/{params.genus}/assembly_counts.txt | sort -k2,2 -rnk3,3 | tr ' ' '\\t' | datamash -g2 first 1 | awk '{{print >"tmp/{params.sample}/assemblies/{params.genus}/"$2".id"}}'
-        else
-           cat tmp/{params.sample}/assemblies/{params.genus}/assembly_ids.txt | datamash -g2 rand 1 | awk '{{print >"tmp/{params.sample}/assemblies/{params.genus}/"$2".id"}}'
-        fi
-        """
+# rule fqs_collect:
+#     input:
+#         aggregate_fqs
+#     output:
+#         stamp = "stages/{sample}.fqs.done"
+#     shell:
+#         """
+#         touch {output}
+#         """
 
 rule map_minimap2:
     input:
         fq="fq/{sample}/{genus}.fq.gz",
-        assembly_ids="tmp/{sample}/assemblies/{genus}/{assembly}.id",
         mmi=get_mmi,
     output:
         bam=temp("tmp/{sample}/{genus}.{assembly}.init.bam"),
@@ -292,6 +289,22 @@ rule get_coverage_bam:
         (bedtools genomecov -ibam {input.bam} > {output.gc}) || true
         cat {output.gc} | awk '{{print $1"\\t"$2*$3"\\t"$4}}' | datamash -g1 sum 2 first 3 | awk '{{print $1,$2/$3}}' > {output.cov}
         """
+
+def aggregate_bams(wildcards):
+    checkpoint_output = checkpoints.get_assemblies_sample.get(**wildcards).output[0]
+    files = expand("bam/{{sample}}/{unit}." + PREFIX + ".filter.{ext}", unit = glob_wildcards(os.path.join(checkpoint_output, "{unit}.id")).unit, ext = ['bam', 'bam.bai', 'genomecov', 'coverage.txt'])
+    return files 
+
+
+rule map_collect:
+    input:
+        aggregate_bams
+    output:
+        stamp="stages/{sample}.map.done"
+    shell:
+        """
+        touch {output}
+        """
           
 rule get_damage:
     input:
@@ -314,79 +327,25 @@ rule get_damage:
         gzip mapdamage/{params.sample}/{params.genus}.{params.assembly}.{PREFIX}.filter/misincorporation.txt
         """
 
-def aggregate_bams_genus(wildcards):
-
-    checkpoint_output = checkpoints.assemblies_genus.get(**wildcards).output[0]    
-    files = expand("bam/{{sample}}/{{genus}}.{assembly}." + PREFIX + ".filter.bam", assembly = glob_wildcards(os.path.join(checkpoint_output, "{assembly}.id")).assembly)
+def aggregate_damage(wildcards):
+    checkpoint_output = checkpoints.get_assemblies_sample.get(**wildcards).output[0]
+    files = expand("mapdamage/{{sample}}/{unit}." + PREFIX + ".filter/misincorporation.txt.gz", unit = glob_wildcards(os.path.join(checkpoint_output, "{unit}.id")).unit)
     return files 
 
-def aggregate_coverage_genus(wildcards):
-
-    checkpoint_output = checkpoints.assemblies_genus.get(**wildcards).output[0]    
-    files = expand("bam/{{sample}}/{{genus}}.{assembly}." + PREFIX + ".filter.genomecov", assembly = glob_wildcards(os.path.join(checkpoint_output, "{assembly}.id")).assembly)
-    return files 
-
-def aggregate_damage_genus(wildcards):
-
-    checkpoint_output = checkpoints.assemblies_genus.get(**wildcards).output[0]    
-    files = expand("mapdamage/{{sample}}/{{genus}}.{assembly}." + PREFIX + ".filter/misincorporation.txt.gz", assembly = glob_wildcards(os.path.join(checkpoint_output, "{assembly}.id")).assembly)
-    return files
-
-
-rule plot_edit_dist:
+rule damage_collect:
     input:
-        aggregate_bams_genus
+        aggregate_damage
     output:
-        pdf="plots/{sample}/{genus}." + PREFIX + ".editDist.pdf",
-        tsv="tables/{sample}/{genus}." + PREFIX + ".editDist.tsv",
-    shell:
-        """
-        Rscript src/plotEditDist.R {output.pdf} {output.tsv} {input}
-        """
-
-rule plot_damage:
-    input:
-        aggregate_damage_genus
-    output:
-        pdf="plots/{sample}/{genus}." + PREFIX + ".damage.pdf",
-        tsv="tables/{sample}/{genus}." + PREFIX + ".damage.tsv.gz",
-    shell:
-        """
-        Rscript src/plotDamage.R {output.pdf} {output.tsv} {input}
-        """
-
-rule map_genus_collect:
-    input:
-        aggregate_bams_genus,
-        aggregate_damage_genus,
-        aggregate_coverage_genus
-    output:
-        stamp = "stages/{sample}.{genus}.map.done"
+        stamp="stages/{sample}.damage.done"
     shell:
         """
         touch {output}
         """
 
-rule plots_genus_collect:
-    input:
-        expand("plots/{{sample}}/{{genus}}." + PREFIX + ".{ext}.pdf",ext=['damage', 'editDist'])
-    output:
-        stamp = "stages/{sample}.{genus}.plots.done"
-    shell:
-        """
-        touch {output}
-        """
-
-def aggregate_sample_genus(wildcards):
-    checkpoint_output = checkpoints.genera_sample.get(**wildcards).output[0]
-    files_plot = expand("stages/{{sample}}.{genus}.plots.done", genus = glob_wildcards(os.path.join(checkpoint_output, "{genus}.id")).genus)
-    files_map = expand("stages/{{sample}}.{genus}.map.done", genus = glob_wildcards(os.path.join(checkpoint_output, "{genus}.id")).genus)
-    return files_plot + files_map
-
-        
 rule summary_sample:
     input:
-        aggregate_sample_genus
+        "stages/{sample}.map.done",
+        "stages/{sample}.damage.done",
     output:
         tsv="tables/{sample}/" + PREFIX + ".summary.tsv",
         stamp = "stages/{sample}.summary.done"
@@ -399,4 +358,57 @@ rule summary_sample:
         Rscript src/summary.R {PREFIX} {DB} {params.sample} {threads}
         touch {output.stamp}
         """
-  
+        
+rule plot_edit_dist:
+    input:
+        stamp="stages/{sample}.map.done",
+        files=lambda wildcards: glob.glob("bam/{sample}/{genus}.*filter.bam".format(sample=wildcards.sample, genus=wildcards.genus))
+    output:
+        pdf="plots/{sample}/{genus}." + PREFIX + ".editDist.pdf",
+        tsv="tables/{sample}/{genus}." + PREFIX + ".editDist.tsv",
+    wildcard_constraints:
+        genus="\d+"
+    shell:
+        """
+        Rscript src/plotEditDist.R {DB} {output.pdf} {output.tsv} {input.files}
+        """
+
+rule plot_damage:
+    input:
+        stamp="stages/{sample}.damage.done",
+        files=lambda wildcards: glob.glob("mapdamage/{sample}/{genus}.*filter/misincorporation.txt.gz".format(sample=wildcards.sample, genus=wildcards.genus))
+    output:
+        pdf="plots/{sample}/{genus}." + PREFIX + ".damage.pdf",
+        tsv="tables/{sample}/{genus}." + PREFIX + ".damage.tsv.gz",
+    wildcard_constraints:
+        genus="\d+"
+    shell:
+        """
+        Rscript src/plotDamage.R {DB} {output.pdf} {output.tsv} {input.files}
+        """
+
+def aggregate_plots(wildcards):
+    checkpoint_output = checkpoints.get_assemblies_sample.get(**wildcards).output[0]    
+    files = expand("plots/{{sample}}/{genus}." + PREFIX + ".{ext}", genus = glob_wildcards(os.path.join(checkpoint_output, "{genus}.genus")).genus, ext = ['damage.pdf', 'editDist.pdf'])
+    return files 
+
+rule plots_collect:
+    input:
+        aggregate_plots
+    output:
+        stamp="stages/{sample}.plots.done"
+    shell:
+        """
+        touch {output}
+        """  
+
+rule all_collect:
+    input:
+        "stages/{sample}.plots.done",
+        "stages/{sample}.summary.done"
+    output:
+        stamp="stages/{sample}.all.done"
+    shell:
+        """
+        touch {output}
+        """  

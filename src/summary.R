@@ -87,12 +87,12 @@ dDamage <- foreach(ff = f1) %dopar% {
 dDamage <- bind_rows(dDamage)
 
 ## taxInfo
-seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "cccccc")
+seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "cccccccc")
 s1 <- filter(seqInfo, assemblyId %in% dGc$assemblyId) %>% select(assemblyId, taxId, taxIdSpecies, taxNameSpecies)
 
 ## final result table
 res <- left_join(dGc, dEditDist, by = c("genusId", "assemblyId", "contigId")) %>% left_join(dDamage, by = c("genusId", "assemblyId", "contigId")) %>% mutate(sampleId = sampleId, flag = "") %>% left_join(s1, by = "assemblyId") %>% select(sampleId, genusId, taxIdSpecies, taxNameSpecies, assemblyId:dam3pAvgDecay) %>% filter(!is.na(nReads))
-idx <- res$dam5p >= 0.1 & res$dam3p >= 0.1 & res$dam5pAvgDecay < 0
+idx <- res$dam5p >= 0.1 & res$dam5pAvgDecay < 0
 idx1 <- res$editDistAvg <= 1.5 & res$editDistAvgDecay < 0
 res$flag[idx & !idx1] <- "damage_0.1"
 res$flag[!idx & idx1] <- "editDist_low"
