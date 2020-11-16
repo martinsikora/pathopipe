@@ -57,9 +57,9 @@ dEditDist <- foreach(ff = f1) %dopar% {
         NULL
     } else {
         r3 <- gsub(".*\\/", "", f1)
-        r4 <- r2 %>% group_by(contigId) %>% count(editDist) %>% mutate(p = n / sum(n)) %>% select(contigId, editDist, n, p) %>% summarise(nReads = sum(n), editDistMode = editDist[which.max(n)], editDistAvg = sum(n * editDist) / sum(n), editDistAvgDecay = mean(diff(n)) / sum(n)) %>% ungroup()
+        r4 <- r2 %>% group_by(contigId) %>% count(editDist) %>% mutate(p = n / sum(n)) %>% select(contigId, editDist, n, p) %>% summarise(nReads = sum(n), editDistMode = editDist[which.max(n)], editDistAvg = sum(n * editDist) / sum(n), editDistAvgDecay = mean(diff(n)) / sum(n), editDistDecayEnd = ifelse(is.na(which(diff(n) > 0)[1]), max(editDist), which(diff(n) > 0)[1])) %>% ungroup()
         r5 <- gsub(".*\\/", "", ff) %>% strsplit("\\.")
-        mutate(r4, genusId = map_chr(r5, 1), assemblyId = paste(map_chr(r5, 2), map_chr(r5, 3), sep = ".")) %>% select(genusId, assemblyId, contigId, nReads, editDistMode:editDistAvgDecay)
+        mutate(r4, genusId = map_chr(r5, 1), assemblyId = paste(map_chr(r5, 2), map_chr(r5, 3), sep = ".")) %>% select(genusId, assemblyId, contigId, nReads, editDistMode:editDistDecayEnd)
     }
 }
 dEditDist <- bind_rows(dEditDist)
@@ -91,10 +91,15 @@ seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types =
 s1 <- filter(seqInfo, assemblyId %in% dGc$assemblyId) %>% select(assemblyId, taxId, taxIdSpecies, taxNameSpecies)
 
 ## final result table
-res <- left_join(dGc, dEditDist, by = c("genusId", "assemblyId", "contigId")) %>% left_join(dDamage, by = c("genusId", "assemblyId", "contigId")) %>% mutate(sampleId = sampleId, flag = "") %>% left_join(s1, by = "assemblyId") %>% select(sampleId, genusId, taxIdSpecies, taxNameSpecies, assemblyId:dam3pAvgDecay) %>% filter(!is.na(nReads))
+res <- left_join(dGc, dEditDist, by = c("genusId", "assemblyId", "contigId")) %>% left_join(dDamage, by = c("genusId", "assemblyId", "contigId")) %>% mutate(sampleId = sampleId, flag = "") %>% left_join(s1, by = "assemblyId") %>% select(sampleId, genusId, taxIdSpecies, taxNameSpecies, assemblyId:dam3pAvgDecay, flag) %>% filter(!is.na(nReads))
 idx <- res$dam5p >= 0.1 & res$dam5pAvgDecay < 0
 idx1 <- res$editDistAvg <= 1.5 & res$editDistAvgDecay < 0
-res$flag[idx & !idx1] <- "damage_0.1"
-res$flag[!idx & idx1] <- "editDist_low"
-res$flag[idx & idx1] <- "damage_0.1;editDist_low"
+idx2 <- res$editDistDecayEnd >= 5
+res$flag[idx & !idx1 & !idx2] <- "damage_0.1"
+res$flag[!idx & idx1 & !idx2] <- "editDistAvg_1.5"
+res$flag[!idx & !idx1 & idx2] <- "editDistDecay_5"
+res$flag[idx & idx1 & !idx2] <- "damage_0.1;editDistAvg_1.5"
+res$flag[idx & !idx1 & idx2] <- "damage_0.1;editDistDecay_5"
+res$flag[!idx & idx1 & idx2] <- "editDistAvg_1.5;editDistDecay_5"
+res$flag[idx & idx1 & idx2] <- "damage_0.1;editDistAvg_1.5;editDistDecay_5"
 write_tsv(res, path = paste("tables/", sampleId, "/", prefix, ".summary.tsv", sep = ""), na = "NaN")
