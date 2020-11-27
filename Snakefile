@@ -25,6 +25,8 @@ db_df = pd.read_table(DB + "/library.seqInfo.tsv").set_index(["assemblyId"], dro
 gen_df = pd.read_table(GENFILE, comment="#", header=None)
 GENERA = gen_df[[1]]
 
+TMP_DIR = "/dev/shm/pathopipe" 
+
 
 ## --------------------------------------------------------------------------------
 ## functions
@@ -88,36 +90,6 @@ rule classify:
         gzip report/{params.sample}.{PREFIX}.krakenuniq.report.tsv
         """
 
-
-rule get_read_ids_classified_nonhuman:
-    input:
-        classfile="classify/{sample}." + PREFIX + ".krakenuniq.class.tsv.gz",
-        tax_ids_human=DB + "/taxLists/33208.kingdom.taxIds.txt",
-    output:
-        read_ids="tmp/{sample}/classified.readIds.txt.gz",
-    benchmark:
-        "benchmarks/{sample}/get_read_ids_classified.txt"
-    shell:
-        """
-        gzip -cd {input.classfile} | awk 'FNR==NR {{ a[$1]; next }} (!($3 in a) && $1 == "C"){{print $2}}' {input.tax_ids_human} - | gzip > {output.read_ids} 
-        """
-
-
-rule get_reads_classified_nonhuman:
-    input:
-        fq=get_fq,
-        read_ids="tmp/{sample}/classified.readIds.txt.gz",
-    output:
-        fq="fq/{sample}/classified.fq.gz",
-    benchmark:
-        "benchmarks/{sample}/get_reads_classified_nonhuman.txt"
-    threads: 4
-    shell:
-        """
-        seqkit grep -f {input.read_ids} {input.fq} | pigz -p {threads} > {output.fq} 
-        """
-
-
 rule get_genera_sample:
     input:
         reportfile="report/{sample}." + PREFIX + ".krakenuniq.report.tsv.gz",
@@ -130,7 +102,7 @@ rule get_genera_sample:
         sample="{sample}",
     shell:
         """
-        (gzip -cd {input.reportfile} | awk 'FNR==NR {{ a[$1]; next }} ($7 in a && $4 >= {KMERS}){{print $7"\t"$9}}' <(cut -f1 {input.genfile}) -) > {output}
+        (gzip -cd {input.reportfile} | mawk 'FNR==NR {{ a[$1]; next }} ($7 in a && $4 >= {KMERS}){{print $7"\\t"$9}}' <(cut -f1 {input.genfile}) -) > {output}
         """
 
 
@@ -149,37 +121,72 @@ checkpoint get_assemblies_sample:
         sample="{sample}",
     shell:
         """
-        zcat {input.tax_ids} | awk -F'\\t' 'FNR==NR {{ a[$1]; next }} ($2 in a)' <(cut -f1 {input.genfile}) - > {output.tax_ids}
-        cat {input.seq_info} | awk -F'\\t' 'FNR==NR {{ a[$4]; next }} ($2 in a){{print $1"\\t"$3"\\t"$5"\\t"$6}}' {output.tax_ids} - | sort > {output.assembly_ids}
-        gzip -cd {input.reportfile} | awk 'FNR==NR {{ a[$4]; next }} ($7 in a && $8 == "assembly"){{print $9"\\t"$4}}' {output.tax_ids} - | sort > tmp/{params.sample}/assemblies/assemblyCountsObs.txt
-        grep -vFwf <(cut -f1 tmp/{params.sample}/assemblies/assemblyCountsObs.txt) tmp/{params.sample}/assemblies/assemblyIds.txt  | awk '{{print $1"\\t0"}}' > tmp/{params.sample}/assemblies/assemblyCounts0.txt
+        zcat {input.tax_ids} | mawk -F'\\t' 'FNR==NR {{ a[$1]; next }} ($2 in a)' <(cut -f1 {input.genfile}) - > {output.tax_ids}
+        cat {input.seq_info} | mawk -F'\\t' 'FNR==NR {{ a[$4]; next }} ($2 in a){{print $1"\\t"$3"\\t"$5"\\t"$6}}' {output.tax_ids} - | sort > {output.assembly_ids}
+        gzip -cd {input.reportfile} | mawk 'FNR==NR {{ a[$4]; next }} ($7 in a && $8 == "assembly"){{print $9"\\t"$4}}' {output.tax_ids} - | sort > tmp/{params.sample}/assemblies/assemblyCountsObs.txt
+        grep -vFwf <(cut -f1 tmp/{params.sample}/assemblies/assemblyCountsObs.txt) tmp/{params.sample}/assemblies/assemblyIds.txt  | mawk '{{print $1"\\t0"}}' > tmp/{params.sample}/assemblies/assemblyCounts0.txt
         cat tmp/{params.sample}/assemblies/assemblyCountsObs.txt tmp/{params.sample}/assemblies/assemblyCounts0.txt | sort > {output.assembly_counts}
         join {output.assembly_ids} {output.assembly_counts} | sort -k3,3 -k2,2 -rnk5,5 | tr ' ' '\\t' | datamash -g2 first 1 first 3 | awk '{{print >"tmp/{params.sample}/assemblies/"$3"."$2".id"}}'
         cat tmp/{params.sample}/assemblies/*.id | cut -f3 | sort | uniq | awk '{{print >"tmp/{params.sample}/assemblies/"$1".genus"}}'
         """
 
-
-rule get_read_ids_genus:
+rule get_read_ids_targets:
     input:
         classfile="classify/{sample}." + PREFIX + ".krakenuniq.class.tsv.gz",
-        genera="tmp/{sample}/assemblies/{genus}.genus",
-        tax_ids=DB + "/taxLists/{genus}.genus.taxIds.txt",
+        tax_ids="tmp/{sample}/assemblies/taxIds.txt",
+        genfile="tmp/{sample}/genera.txt",
     output:
-        read_ids=temp("tmp/{sample}/{genus}.readIds.txt.gz"),
-    wildcard_constraints:
-        genus="\d+",
+        ids=temp(TMP_DIR + "/{sample}/targets.taxIds.txt"),
+        classfile=temp(TMP_DIR + "/{sample}/targets.class.tsv.gz"),
+        read_ids=temp(TMP_DIR + "/{sample}/targets.readIds.tsv.gz"),
     benchmark:
-        "benchmarks/{sample}/{genus}.get_read_ids_genus.txt"
+        "benchmarks/{sample}/get_read_ids_targets.txt"
+    threads: 16
     shell:
         """
-        gzip -cd {input.classfile} | awk 'FNR==NR {{ a[$1]; next }} ($3 in a || $3 == {wildcards.genus}){{print $2}}' {input.tax_ids} - | gzip > {output.read_ids}
+        cat {input.tax_ids} | awk '{{print $4"\\t"$2}}' > {output.ids}
+        cat {input.genfile} | awk '{{print $1"\\t"$1}}' >> {output.ids}
+        gzip -cd {input.classfile} | mawk 'FNR==NR {{ a[$1]; next }} ($3 in a){{print $3"\\t"$2}}' <(cut -f1 {output.ids}) - | sort -k1,1 -S 128G --parallel={threads} | gzip > {output.classfile} 
+        join <(zcat {output.classfile}) <(sort -k1,1 {output.ids}) | awk '{{print $2"\\t"$3}}' | gzip > {output.read_ids}
         """
 
 
+rule get_reads_genera_all:
+    input:
+        fq=get_fq,
+        read_ids=TMP_DIR + "/{sample}/targets.readIds.tsv.gz",
+    output:
+        fq=temp(TMP_DIR + "/{sample}/classified.fq.gz"),
+    benchmark:
+        "benchmarks/{sample}/get_reads_genera_all.txt" 
+    priority: 10
+    wildcard_constraints:
+        genus="\d+",
+    shell:
+        """
+        seqtk subseq <(zcat {input.fq}) <(zcat {input.read_ids} | cut -f1) | gzip > {output.fq} 
+        """
+
+        
+rule get_read_ids_genus:
+    input:
+        read_ids=TMP_DIR + "/{sample}/targets.readIds.tsv.gz"
+    output:
+        read_ids=temp(TMP_DIR + "/{sample}/{genus}.readIds.txt.gz")
+    benchmark:
+        "benchmarks/{sample}/{genus}.get_read_ids_genus.txt"
+    wildcard_constraints:
+        genus="\d+",
+    shell:
+        """
+        zcat {input.read_ids} | awk '$2 == {wildcards.genus}{{print $1}}' | gzip > {output.read_ids}
+        """
+
+        
 rule get_reads_genus:
     input:
-        fq="fq/{sample}/classified.fq.gz",
-        read_ids="tmp/{sample}/{genus}.readIds.txt.gz",
+        fq=TMP_DIR + "/{sample}/classified.fq.gz",
+        read_ids=TMP_DIR + "/{sample}/{genus}.readIds.txt.gz"
     output:
         fq="fq/{sample}/{genus}.fq.gz",
     benchmark:
@@ -188,7 +195,7 @@ rule get_reads_genus:
         genus="\d+",
     shell:
         """
-        seqkit grep -f {input.read_ids} {input.fq} | gzip > {output.fq} 
+        seqtk subseq {input.fq} {input.read_ids} | gzip > {output.fq} 
         """
 
 
@@ -197,7 +204,7 @@ rule map_minimap2:
         fq="fq/{sample}/{genus}.fq.gz",
         mmi=get_mmi,
     output:
-        bam=temp("tmp/{sample}/{genus}.{assembly}.init.bam"),
+        bam=temp(TMP_DIR + "/{sample}/{genus}.{assembly}.init.bam")
     log:
         "logs/{sample}/{genus}.{assembly}.map_minimap2.log",
     benchmark:
@@ -215,9 +222,9 @@ rule map_minimap2:
 
 rule sort_bam:
     input:
-        bam="tmp/{sample}/{genus}.{assembly}.init.bam",
+        bam=TMP_DIR + "/{sample}/{genus}.{assembly}.init.bam"
     output:
-        bam=temp("tmp/{sample}/{genus}.{assembly}.srt.bam"),
+        bam=temp(TMP_DIR + "/{sample}/{genus}.{assembly}.srt.bam"),
     wildcard_constraints:
         genus="\d+",
     threads: 2
@@ -229,7 +236,7 @@ rule sort_bam:
 
 rule mark_duplicates:
     input:
-        bam="tmp/{sample}/{genus}.{assembly}.srt.bam",
+        bam=TMP_DIR + "/{sample}/{genus}.{assembly}.srt.bam",
     output:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".mrkdup.bam",
         metrics="bam/{sample}/{genus}.{assembly}." + PREFIX + ".mrkdup.metrics.txt",
@@ -286,7 +293,7 @@ rule get_coverage_bam:
         """
         touch {output.gc}
         (bedtools genomecov -ibam {input.bam} > {output.gc}) || true
-        cat {output.gc} | awk '{{print $1"\\t"$2*$3"\\t"$4}}' | datamash -g1 sum 2 first 3 | awk '{{print $1,$2/$3}}' > {output.cov}
+        cat {output.gc} | mawk '{{print $1"\\t"$2*$3"\\t"$4}}' | datamash -g1 sum 2 first 3 | mawk '{{print $1,$2/$3}}' > {output.cov}
         """
 
 
