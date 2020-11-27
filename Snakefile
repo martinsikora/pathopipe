@@ -10,6 +10,7 @@ DB = config["db"]  ## database root dir
 GENFILE = config["genera"]  ## target genera file
 KMERS = config["kmers"]  ## minimum kmers for target assemblies
 MQ = config["MQ"]  ## MQ cutoff for mapped BAMs
+TMP_DIR = config["tmp_dir"]  ## path to location for temporary files
 
 
 ## --------------------------------------------------------------------------------
@@ -24,8 +25,6 @@ db_df = pd.read_table(DB + "/library.seqInfo.tsv").set_index(["assemblyId"], dro
 
 gen_df = pd.read_table(GENFILE, comment="#", header=None)
 GENERA = gen_df[[1]]
-
-TMP_DIR = "/dev/shm/pathopipe" 
 
 
 ## --------------------------------------------------------------------------------
