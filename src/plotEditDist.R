@@ -60,11 +60,11 @@ idxC <- viridis(nBam)
 idxS <- rep(0:14, length.out = nBam)
 th <- theme_bw() + theme(strip.background = element_blank(), panel.grid.major = element_line(linetype = "dotted", size = 0.25), legend.key.size = unit(0.015, "npc"), legend.text = element_text(size = 3), panel.grid.minor = element_blank())
 
-d <- mutate(d, lab = paste(assemblyId, taxNameSpecies, sep = " | "))
 if(nrow(d) == 0){
     pdf(outPdf, width = 10, height = 4)
     dev.off()
 } else {
+    d <- mutate(d, lab = paste(assemblyId, taxNameSpecies, sep = " | "))
     pdf(outPdf, width = 14, height = 5)
     p <- ggplot(d, aes(x = editDist, y = p, fill = lab, colour = lab, shape = lab))
     print(p + geom_line(size = 0.25, show.legend = FALSE) + geom_point(size = 1) + xlab("Edit distance") + ylab("Fraction of reads") + scale_shape_manual(values = idxS) + scale_colour_manual(values = idxC) + th + guides(shape = guide_legend(ncol = 4, override.aes = list(size = 0.75, stroke = 0.1))))
