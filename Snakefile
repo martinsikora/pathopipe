@@ -194,7 +194,7 @@ rule get_reads_genus:
         genus="\d+",
     shell:
         """
-        seqtk subseq {input.fq} {input.read_ids} | gzip > {output.fq} 
+        seqtk subseq {input.fq} {input.read_ids} | seqkit rmdup | gzip > {output.fq} 
         """
 
 
