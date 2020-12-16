@@ -47,22 +47,33 @@ dGc <- foreach(ff = f1) %dopar% {
 }
 dGc <- bind_rows(dGc)
 
-## edit distance
+## bam stats
 f1 <- list.files(path = paste("bam/", sampleId, sep = ""), pattern = "filter.bam$", full.names = TRUE)
-dEditDist <- foreach(ff = f1) %dopar% {
-    p1 <- ScanBamParam(what = "rname", tag=c("NM"), flag = scanBamFlag(isDuplicate = FALSE))
+dBam <- foreach(ff = f1) %dopar% {
+    p1 <- ScanBamParam(what = c("rname", "mapq", "qwidth", "cigar"), tag=c("NM"), flag = scanBamFlag(isDuplicate = FALSE))
     r1 <- scanBam(ff, param=p1)
-    r2 <- tibble(contigId = as.character(r1[[1]]$rname), editDist = r1[[1]]$tag$NM)
-    if(nrow(r2) == 0){
+    if(length(r1[[1]]$rname)== 0){
         NULL
     } else {
+        r2 <- as_tibble(r1[[1]][c("rname", "mapq", "qwidth", "cigar")]) %>% mutate(nm = r1[[1]]$tag$NM)
+
+        ## parse cigar string to count number of soft-clipped bases; map function converts all non-S containing cigar fields into NA
+        r21 <- gsub("([A-Z])", "\\1.", r2$cigar) %>% strsplit("\\.") %>% map(function(x) as.integer(gsub("S", "", x)) %>% sum(na.rm = TRUE)) %>% as.integer()
+        r2 <- mutate(r2, nSoftClip = r21)
+
+        ## generate final summary tibble
         r3 <- gsub(".*\\/", "", f1)
-        r4 <- r2 %>% group_by(contigId) %>% count(editDist) %>% mutate(p = n / sum(n)) %>% select(contigId, editDist, n, p) %>% summarise(nReads = sum(n), editDistMode = editDist[which.max(n)], editDistAvg = sum(n * editDist) / sum(n), editDistAvgDecay = mean(diff(n)) / sum(n), editDistDecayEnd = ifelse(is.na(which(diff(n) > 0)[1]), max(editDist), which(diff(n) > 0)[1])) %>% ungroup()
+
+        r41 <- r2 %>% group_by(rname) %>% count(nm) %>% mutate(p = n / sum(n)) %>% select(rname, nm, n, p) %>% summarise(nReads = sum(n), editDistMode = nm[which.max(n)], editDistAvg = sum(n * nm) / sum(n), editDistAvgDecay = mean(diff(n)) / sum(n), editDistDecayEnd = ifelse(is.na(which(diff(n) > 0)[1]), max(nm), which(diff(n) > 0)[1])) %>% ungroup()
+        colnames(r41)[1] <- "contigId"
+        r42 <- r2 %>% group_by(rname) %>% summarise(readLAvg = mean(qwidth), mqAvg = mean(mapq), nSoftClipAvg = mean(nSoftClip)) %>% ungroup() %>% select(-rname)
+
         r5 <- gsub(".*\\/", "", ff) %>% strsplit("\\.")
-        mutate(r4, genusId = map_chr(r5, 1), assemblyId = paste(map_chr(r5, 2), map_chr(r5, 3), sep = ".")) %>% select(genusId, assemblyId, contigId, nReads, editDistMode:editDistDecayEnd)
+        r6 <- bind_cols(r41, r42) %>% mutate(genusId = map_chr(r5, 1), assemblyId = paste(map_chr(r5, 2), map_chr(r5, 3), sep = ".")) %>% select(genusId, assemblyId, contigId, nReads, editDistMode:nSoftClipAvg)
+        r6
     }
 }
-dEditDist <- bind_rows(dEditDist)
+dBam <- bind_rows(dBam)
 
 ## damage
 st <- c("C>T", "G>A")
@@ -91,10 +102,11 @@ seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types =
 s1 <- filter(seqInfo, assemblyId %in% dGc$assemblyId) %>% select(assemblyId, taxId, taxIdSpecies, taxNameSpecies)
 
 ## final result table
-res <- left_join(dGc, dEditDist, by = c("genusId", "assemblyId", "contigId")) %>% left_join(dDamage, by = c("genusId", "assemblyId", "contigId")) %>% mutate(sampleId = sampleId, flag = "") %>% left_join(s1, by = "assemblyId") %>% select(sampleId, genusId, taxIdSpecies, taxNameSpecies, assemblyId:dam3pAvgDecay, flag) %>% filter(!is.na(nReads))
+res <- left_join(dGc, dBam, by = c("genusId", "assemblyId", "contigId")) %>% left_join(dDamage, by = c("genusId", "assemblyId", "contigId")) %>% mutate(sampleId = sampleId, flag = "") %>% left_join(s1, by = "assemblyId") %>% select(sampleId, genusId, taxIdSpecies, taxNameSpecies, assemblyId:dam3pAvgDecay, flag) %>% filter(!is.na(nReads))
 idx <- res$dam5p >= 0.1 & res$dam5pAvgDecay < 0
 idx1 <- res$editDistAvg <= 1.5 & res$editDistAvgDecay < 0
 idx2 <- res$editDistDecayEnd >= 5
+idx3 <- res$mqAvg >= 20
 res$flag[idx & !idx1 & !idx2] <- "damage_0.1"
 res$flag[!idx & idx1 & !idx2] <- "editDistAvg_1.5"
 res$flag[!idx & !idx1 & idx2] <- "editDistDecay_5"
@@ -102,4 +114,6 @@ res$flag[idx & idx1 & !idx2] <- "damage_0.1;editDistAvg_1.5"
 res$flag[idx & !idx1 & idx2] <- "damage_0.1;editDistDecay_5"
 res$flag[!idx & idx1 & idx2] <- "editDistAvg_1.5;editDistDecay_5"
 res$flag[idx & idx1 & idx2] <- "damage_0.1;editDistAvg_1.5;editDistDecay_5"
+res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.1;editDistAvg_1.5;editDistDecay_5;mqAvg_20"
+
 write_tsv(res, path = paste("tables/", sampleId, "/", prefix, ".summary.tsv", sep = ""), na = "NaN")
