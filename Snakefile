@@ -370,7 +370,7 @@ rule summary_sample:
         "stages/{sample}.map.done",
         "stages/{sample}.damage.done",
     output:
-        tsv="tables/{sample}/" + PREFIX + ".summary.tsv",
+        tsv="tables/{sample}/" + PREFIX + ".summary.tsv.gz",
         stamp="stages/{sample}.summary.done",
     params:
         sample="{sample}",

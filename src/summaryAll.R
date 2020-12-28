@@ -31,19 +31,19 @@ files <- args[-1]
 ## process tables and summarise
 
 d <- foreach(f = files) %do% {
-    r <- read_tsv(f)
+    r <- read_tsv(f, col_types = "ccccccdddddddddddddddddddc")
     r
 }
 d <- bind_rows(d)
 write_tsv(d, path = paste("tables/", prefix, ".summary.tsv.gz", sep = ""))
 
-flags <- c("editDistAvg_1.5", "editDistDecay_5", "editDistAvg_1.5;editDistDecay_5", "damage_0.1", "damage_0.1;editDistAvg_1.5", "damage_0.1;editDistDecay_5",  "damage_0.1;editDistAvg_1.5;editDistDecay_5")
-idxC <- c("grey80", "grey50", "grey30", "gold", "orange1", "orange3", "red")
+flags <- c("editDistAvg_1.5", "editDistDecay_5", "editDistAvg_1.5;editDistDecay_5", "damage_0.1", "damage_0.1;editDistAvg_1.5", "damage_0.1;editDistDecay_5",  "damage_0.1;editDistAvg_1.5;editDistDecay_5", "damage_0.1;editDistAvg_1.5;editDistDecay_5;mqAvg_20")
+idxC <- c("grey80", "grey50", "grey30", "gold", "orange1", "orange3", "red", "red4")
 names(idxC) <- flags
 
 idxS <- filter(d, flag %in% flags[-1:-3]) %>% .$taxNameSpecies %>% unique()
 d1 <- filter(d, taxNameSpecies %in% idxS)
-w <- d$contigId %>% unique() %>% length() %/% 20 + 2
+w <- d$contigId %>% unique() %>% length() %/% 10 + 2
 h <- d$sampleId %>% unique() %>% length() %/% 2 + 2
 
 d1$flag <- factor(d1$flag, levels = flags)

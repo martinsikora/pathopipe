@@ -116,4 +116,4 @@ res$flag[!idx & idx1 & idx2] <- "editDistAvg_1.5;editDistDecay_5"
 res$flag[idx & idx1 & idx2] <- "damage_0.1;editDistAvg_1.5;editDistDecay_5"
 res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.1;editDistAvg_1.5;editDistDecay_5;mqAvg_20"
 
-write_tsv(res, path = paste("tables/", sampleId, "/", prefix, ".summary.tsv", sep = ""), na = "NaN")
+write_tsv(res, path = paste("tables/", sampleId, "/", prefix, ".summary.tsv.gz", sep = ""), na = "NaN")

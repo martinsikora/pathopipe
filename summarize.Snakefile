@@ -30,7 +30,7 @@ rule all:
 
 rule summary_all:
     input:
-        tsv=expand("tables/{sample}/" + PREFIX + ".summary.tsv", sample = SAMPLES),
+        tsv=expand("tables/{sample}/" + PREFIX + ".summary.tsv.gz", sample = SAMPLES),
         stamp=expand("stages/{sample}.summary.done", sample = SAMPLES),
     output:
         pdf="plots/" + PREFIX + ".hits.pdf",
