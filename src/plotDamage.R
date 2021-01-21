@@ -76,9 +76,13 @@ idxSt <- c("red", "blue", rep("grey", length(st) - 2))
 names(idxSt) <- st
 
 h <- 2 + length(infiles)
+
 pdf(outPdf, width = 10, height = h)
-p <- ggplot(d, aes(x = pos + 1, y = p, colour = name))
-print(p +
+if(nrow(d) == 0){
+    dev.off()
+} else {
+    p <- ggplot(d, aes(x = pos + 1, y = p, colour = name))
+    print(p +
       geom_line(size = 0.25) +
       facet_grid(lab ~ end, scales = "free") +
       xlab("Position from read end") +
@@ -87,4 +91,5 @@ print(p +
       scale_color_manual(values = idxSt) +
       theme_bw() +
       theme(strip.background = element_blank(), panel.grid.major = element_line(linetype = "dotted", size = 0.25), panel.grid.minor = element_blank(), strip.text.y = element_text(angle = 0, hjust = 0), legend.position = "none"))
-dev.off()
+    dev.off()
+}
