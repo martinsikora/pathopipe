@@ -41,7 +41,7 @@ dGc <- foreach(ff = f1) %dopar% {
     } else {
         r2 <- r1 %>%
             group_by(contigId) %>%
-            summarise(contigL = l[1], coverageAvg = sum(dp * count) / contigL, coverageSd = sqrt(sum((dp - coverageAvg)^2*count)/sum(count)), coverageBp = sum(count[dp>0]), coverageP = 1 - p[1], coverageCv = coverageSd / coverageAvg, coverageEvennessScore = 1 - sum((ceiling(coverageAvg) - dp[dp <= ceiling(coverageAvg)])*count[dp <= ceiling(coverageAvg)] / (ceiling(coverageAvg) * contigL)))
+            summarise(contigL = l[1], coverageAvg = sum(dp * count) / contigL, coverageSd = sqrt(sum((dp - coverageAvg)^2*count)/sum(count)), coverageBp = sum(count[dp>0]), coverageP = 1 - p[1], coveragePExp = 1 - exp(-0.883 * coverageAvg), deltaCoverageP = coveragePExp - coverageP, coverageCv = coverageSd / coverageAvg, coverageEvennessScore = 1 - sum((ceiling(coverageAvg) - dp[dp <= ceiling(coverageAvg)])*count[dp <= ceiling(coverageAvg)] / (ceiling(coverageAvg) * contigL)))
         r3 <- gsub(".*\\/", "", ff) %>%
             strsplit("\\.") %>%
             unlist()
@@ -83,7 +83,7 @@ dBam <- foreach(ff = f1) %dopar% {
 
         r42 <- r2 %>%
             group_by(rname) %>%
-            summarise(readLAvg = mean(qwidth), mqAvg = mean(mapq), nSoftClipAvg = mean(nSoftClip)) %>%
+            summarise(readLAvg = mean(qwidth), mqAvg = mean(mapq), nSoftClipAvg = mean(nSoftClip), ani = 1 - sum(nm)/sum(qwidth)) %>%
             ungroup() %>%
             select(-rname)
 
@@ -93,7 +93,7 @@ dBam <- foreach(ff = f1) %dopar% {
 
         r6 <- bind_cols(r41, r42) %>%
             mutate(genusId = r5[1], assemblyId = paste(r5[2:(length(r5) - 4)], collapse = ".")) %>%
-            select(genusId, assemblyId, contigId, nReads, editDistMode:nSoftClipAvg)
+            select(genusId, assemblyId, contigId, nReads, editDistMode:ani)
         r6
     }
 }
