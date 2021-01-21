@@ -267,6 +267,7 @@ rule index_bam:
 rule filter_bam:
     input:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".mrkdup.bam",
+        fa=get_fa
     output:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam",
         bai="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam.bai",
@@ -274,7 +275,7 @@ rule filter_bam:
         genus="\d+",
     shell:
         """
-        samtools view -q{MQ} -F 0x400 -bh {input.bam} > {output.bam}
+        samtools view -q{MQ} -F 0x400 -bh {input.bam} | samtools calmd -b - {input.fa} > {output.bam}
         samtools index {output.bam}
         """
 
@@ -322,34 +323,28 @@ rule get_damage:
     input:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam",
         bai="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam.bai",
-        fa=get_fa,
     output:
-        mis=(
-            "mapdamage/{sample}/{genus}.{assembly}."
-            + PREFIX
-            + ".filter/misincorporation.txt.gz"
-        ),
+        dam="metadamage/{sample}/{genus}.{assembly}." + PREFIX + ".filter.damage_global.txt",
+        bdam="metadamage/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bdamage.gz",
     benchmark:
         "benchmarks/{sample}/{genus}.{assembly}.get_damage.txt"
-    params:
-        sample="{sample}",
-        genus="{genus}",
-        assembly="{assembly}",
+    log:
+        "logs/{sample}/{genus}.{assembly}.get_damage.log"
     wildcard_constraints:
         genus="\d+",
     shell:
         """
-        mapDamage -i {input.bam} -r {input.fa} -d mapdamage/{params.sample}/{params.genus}.{params.assembly}.{PREFIX}.filter --no-stats
-        gzip mapdamage/{params.sample}/{params.genus}.{params.assembly}.{PREFIX}.filter/misincorporation.txt
+        (metadamage getdamage -p 25 -r1 {input.bam} -o metadamage/{wildcards.sample}/{wildcards.genus}.{wildcards.assembly}.{PREFIX}.filter) 2> {log} 1> {output.dam}
         """
 
 
 def aggregate_damage(wildcards):
     checkpoint_output = checkpoints.get_assemblies_sample.get(**wildcards).output[0]
     files = expand(
-        "mapdamage/{sample}/{unit}." + PREFIX + ".filter/misincorporation.txt.gz",
+        "metadamage/{sample}/{unit}." + PREFIX + ".filter.{ext}",
         sample=wildcards.sample,
         unit=glob_wildcards(os.path.join(checkpoint_output, "{unit}.id")).unit,
+        ext=["bdamage.gz", "damage_global.txt"],
     )
     return files
 
@@ -419,12 +414,11 @@ def aggregate_damage_genus(wildcards):
     a = [u.split(".", 1)[1] for u in units]
     f = [a[i] for i in range(len(a)) if g[i] == wildcards.genus]
     files = expand(
-        "mapdamage/{sample}/{genus}.{assembly}."
-        + PREFIX
-        + ".filter/misincorporation.txt.gz",
+        "metadamage/{sample}/{genus}.{assembly}." + PREFIX + ".filter.{ext}",
         sample=wildcards.sample,
         genus=wildcards.genus,
         assembly=f,
+        ext=["bdamage.gz"],
     )
     return files
 
@@ -434,12 +428,11 @@ rule plot_damage:
         aggregate_damage_genus,
     output:
         pdf="plots/{sample}/{genus}." + PREFIX + ".damage.pdf",
-        tsv="tables/{sample}/{genus}." + PREFIX + ".damage.tsv.gz",
     wildcard_constraints:
         genus="\d+",
     shell:
         """
-        Rscript src/plotDamage.R {DB} {output.pdf} {output.tsv} {input}
+        Rscript src/plotDamage.R {DB} {output.pdf} {input}
         """
 
 
