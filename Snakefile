@@ -89,6 +89,7 @@ rule classify:
         gzip report/{params.sample}.{PREFIX}.krakenuniq.report.tsv
         """
 
+
 rule get_genera_sample:
     input:
         reportfile="report/{sample}." + PREFIX + ".krakenuniq.report.tsv.gz",
@@ -129,6 +130,7 @@ checkpoint get_assemblies_sample:
         cat tmp/{params.sample}/assemblies/*.id | cut -f3 | sort | uniq | awk '{{print >"tmp/{params.sample}/assemblies/"$1".genus"}}'
         """
 
+
 rule get_read_ids_targets:
     input:
         classfile="classify/{sample}." + PREFIX + ".krakenuniq.class.tsv.gz",
@@ -157,7 +159,7 @@ rule get_reads_genera_all:
     output:
         fq=temp(TMP_DIR + "/{sample}/classified.fq.gz"),
     benchmark:
-        "benchmarks/{sample}/get_reads_genera_all.txt" 
+        "benchmarks/{sample}/get_reads_genera_all.txt"
     priority: 10
     wildcard_constraints:
         genus="\d+",
@@ -166,12 +168,12 @@ rule get_reads_genera_all:
         seqtk subseq <(zcat {input.fq}) <(zcat {input.read_ids} | cut -f1) | gzip > {output.fq} 
         """
 
-        
+
 rule get_read_ids_genus:
     input:
-        read_ids=TMP_DIR + "/{sample}/targets.readIds.tsv.gz"
+        read_ids=TMP_DIR + "/{sample}/targets.readIds.tsv.gz",
     output:
-        read_ids=temp(TMP_DIR + "/{sample}/{genus}.readIds.txt.gz")
+        read_ids=temp(TMP_DIR + "/{sample}/{genus}.readIds.txt.gz"),
     benchmark:
         "benchmarks/{sample}/{genus}.get_read_ids_genus.txt"
     wildcard_constraints:
@@ -181,11 +183,11 @@ rule get_read_ids_genus:
         zcat {input.read_ids} | awk '$2 == {wildcards.genus}{{print $1}}' | gzip > {output.read_ids}
         """
 
-        
+
 rule get_reads_genus:
     input:
         fq=TMP_DIR + "/{sample}/classified.fq.gz",
-        read_ids=TMP_DIR + "/{sample}/{genus}.readIds.txt.gz"
+        read_ids=TMP_DIR + "/{sample}/{genus}.readIds.txt.gz",
     output:
         fq="fq/{sample}/{genus}.fq.gz",
     benchmark:
@@ -203,7 +205,7 @@ rule map_minimap2:
         fq="fq/{sample}/{genus}.fq.gz",
         mmi=get_mmi,
     output:
-        bam=temp(TMP_DIR + "/{sample}/{genus}.{assembly}.init.bam")
+        bam=temp(TMP_DIR + "/{sample}/{genus}.{assembly}.init.bam"),
     log:
         "logs/{sample}/{genus}.{assembly}.map_minimap2.log",
     benchmark:
@@ -221,7 +223,7 @@ rule map_minimap2:
 
 rule sort_bam:
     input:
-        bam=TMP_DIR + "/{sample}/{genus}.{assembly}.init.bam"
+        bam=TMP_DIR + "/{sample}/{genus}.{assembly}.init.bam",
     output:
         bam=temp(TMP_DIR + "/{sample}/{genus}.{assembly}.srt.bam"),
     wildcard_constraints:
@@ -267,7 +269,7 @@ rule index_bam:
 rule filter_bam:
     input:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".mrkdup.bam",
-        fa=get_fa
+        fa=get_fa,
     output:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam",
         bai="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam.bai",
@@ -324,12 +326,16 @@ rule get_damage:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam",
         bai="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam.bai",
     output:
-        dam="metadamage/{sample}/{genus}.{assembly}." + PREFIX + ".filter.damage_global.txt",
+        dam=(
+            "metadamage/{sample}/{genus}.{assembly}."
+            + PREFIX
+            + ".filter.damage_global.txt"
+        ),
         bdam="metadamage/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bdamage.gz",
     benchmark:
         "benchmarks/{sample}/{genus}.{assembly}.get_damage.txt"
     log:
-        "logs/{sample}/{genus}.{assembly}.get_damage.log"
+        "logs/{sample}/{genus}.{assembly}.get_damage.log",
     wildcard_constraints:
         genus="\d+",
     shell:
