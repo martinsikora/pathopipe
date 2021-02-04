@@ -90,6 +90,18 @@ rule classify:
         """
 
 
+rule classify_collect:
+    input:
+        classify="classify/{sample}." + PREFIX + ".krakenuniq.class.tsv.gz",
+        rep="report/{sample}." + PREFIX + ".krakenuniq.report.tsv.gz",
+    output:
+        stamp="stages/{sample}.classify.done",
+    shell:
+        """
+        touch {output}
+        """
+        
+
 rule get_genera_sample:
     input:
         reportfile="report/{sample}." + PREFIX + ".krakenuniq.report.tsv.gz",
@@ -465,6 +477,7 @@ rule plots_collect:
 
 rule all_collect:
     input:
+        "stages/{sample}.classify.done",
         "stages/{sample}.map.done",
         "stages/{sample}.plots.done",
         "stages/{sample}.summary.done",
