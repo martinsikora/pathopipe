@@ -31,7 +31,7 @@ files <- args[-1]
 ## process tables and summarise
 
 d <- foreach(f = files) %do% {
-    r <- read_tsv(f, col_types = "ccccccdddddddddddddddddddc")
+    r <- read_tsv(f, col_types = "ccccccddddddddddddddddddddddddc")
     r
 }
 d <- bind_rows(d)

@@ -35,21 +35,38 @@ registerDoParallel(threads)
 ## coverage
 f1 <- list.files(path = paste("bam/", sampleId, sep = ""), pattern = "genomecov", full.names = TRUE)
 dGc <- foreach(ff = f1) %dopar% {
-    r1 <- read_tsv(ff, col_type = "ciddd", col_names = c("contigId", "dp", "count", "l", "p")) %>% filter(contigId != "genome")
+    r1 <- read_tsv(ff, col_type = "ciddd", col_names = c("contigId", "dp", "count", "l", "p"))
     if(nrow(r1) == 0){
         NULL
     } else {
+
+        ## find contigs with coverage
+        r11 <- filter(r1, dp > 0, contigId != "genome") %>%
+            distinct(contigId)
+        nContigs = r1$contigId %>%
+            unique() %>%
+            length() -1
+
+        ## coverage summary stats
         r2 <- r1 %>%
+            filter(contigId %in% r11$contigId) %>%
             group_by(contigId) %>%
             summarise(contigL = l[1], coverageAvg = sum(dp * count) / contigL, coverageSd = sqrt(sum((dp - coverageAvg)^2*count)/sum(count)), coverageBp = sum(count[dp>0]), coverageP = 1 - p[1], coveragePExp = 1 - exp(-0.883 * coverageAvg), deltaCoverageP = coveragePExp - coverageP, coverageCv = coverageSd / coverageAvg, coverageEvennessScore = 1 - sum((ceiling(coverageAvg) - dp[dp <= ceiling(coverageAvg)])*count[dp <= ceiling(coverageAvg)] / (ceiling(coverageAvg) * contigL)))
+        r21 <- r1 %>%
+            filter(contigId == "genome") %>%
+            summarise(contigId = "genome", contigL = l[1], coverageAvg = sum(dp * count) / contigL, coverageSd = sqrt(sum((dp - coverageAvg)^2*count)/sum(count)), coverageBp = sum(count[dp>0]), coverageP = 1 - p[1], coveragePExp = 1 - exp(-0.883 * coverageAvg), deltaCoverageP = coveragePExp - coverageP, coverageCv = coverageSd / coverageAvg, coverageEvennessScore = 1 - sum((ceiling(coverageAvg) - dp[dp <= ceiling(coverageAvg)])*count[dp <= ceiling(coverageAvg)] / (ceiling(coverageAvg) * contigL))) %>%
+            mutate(nContigs = nContigs, pContigsCovered = nrow(r11) / nContigs)
+        r2 <- bind_rows(r2, r21)
+
         r3 <- gsub(".*\\/", "", ff) %>%
             strsplit("\\.") %>%
             unlist()
         r2 <- mutate(r2, genusId = r3[1], assemblyId = paste(r3[2:(length(r3) - 4)], collapse = "."))
-        select(r2, genusId, assemblyId, contigId, contigL, coverageAvg:coverageEvennessScore)
+        select(r2, genusId, assemblyId, contigId, contigL, coverageAvg:pContigsCovered)
     }
 }
 dGc <- bind_rows(dGc)
+
 
 ## bam stats
 f1 <- list.files(path = paste("bam/", sampleId, sep = ""), pattern = "filter.bam$", full.names = TRUE)
@@ -60,7 +77,7 @@ dBam <- foreach(ff = f1) %dopar% {
         NULL
     } else {
         r2 <- as_tibble(r1[[1]][c("rname", "mapq", "qwidth", "cigar")]) %>%
-            mutate(nm = r1[[1]]$tag$NM)
+            mutate(nm = r1[[1]]$tag$NM, rname = as.character(rname))
 
         ## parse cigar string to count number of soft-clipped bases; map function converts all non-S containing cigar fields into NA
         r21 <- gsub("([A-Z])", "\\1.", r2$cigar) %>%
@@ -80,12 +97,22 @@ dBam <- foreach(ff = f1) %dopar% {
             summarise(nReads = sum(n), editDistMode = nm[which.max(n)], editDistAvg = sum(n * nm) / sum(n), editDistAvgDecay = mean(diff(n)) / sum(n), editDistDecayEnd = ifelse(is.na(which(diff(n) > 0)[1]), max(nm), which(diff(n) > 0)[1])) %>%
             ungroup()
         colnames(r41)[1] <- "contigId"
+        r411 <- r2 %>%
+            count(nm) %>%
+            mutate(p = n / sum(n)) %>%
+            select(nm, n, p) %>%
+            summarise(nReads = sum(n), editDistMode = nm[which.max(n)], editDistAvg = sum(n * nm) / sum(n), editDistAvgDecay = mean(diff(n)) / sum(n), editDistDecayEnd = ifelse(is.na(which(diff(n) > 0)[1]), max(nm), which(diff(n) > 0)[1])) %>%
+            mutate(contigId = "genome")
+        r41 <- bind_rows(r41, r411)
 
         r42 <- r2 %>%
             group_by(rname) %>%
             summarise(readLAvg = mean(qwidth), mqAvg = mean(mapq), nSoftClipAvg = mean(nSoftClip), ani = 1 - sum(nm)/sum(qwidth)) %>%
             ungroup() %>%
             select(-rname)
+        r421 <- r2 %>%
+            summarise(readLAvg = mean(qwidth), mqAvg = mean(mapq), nSoftClipAvg = mean(nSoftClip), ani = 1 - sum(nm)/sum(qwidth))
+        r42 <- bind_rows(r42, r421)
 
         r5 <- gsub(".*\\/", "", ff) %>%
             strsplit("\\.") %>%
@@ -103,6 +130,8 @@ dBam <- bind_rows(dBam)
 hdr <- c("contigId", "nReads", "end", "pos", "AA", "AC", "AG", "AT", "CA", "CC", "CG", "CT", "GA", "GC", "GG", "GT", "TA", "TC", "TG", "TT")
 
 f1 <- list.files(path = paste("metadamage/", sampleId, sep = ""), pattern = "bdamage.gz$", full.names = TRUE)
+ct <- c("CC", "CA", "CG", "CT")
+ga <- c("GG", "GC", "GT", "GA")
 dDamage <- foreach(ff = f1) %dopar% {
 
     bam <- gsub(".bdamage.gz", ".bam", ff) %>%
@@ -114,7 +143,7 @@ dDamage <- foreach(ff = f1) %dopar% {
         strsplit("\\.") %>%
         unlist()
 
-    p <- pipe(paste("metadamage print -howmany 25 -bam ", bam, " ", ff))
+    p <- pipe(paste("metadamage print -countout -howmany 25 -bam ", bam, " ", ff))
     r <- read_tsv(p, col_names = hdr, col_types = "cdcidddddddddddddddd", skip = 1)
 
     if(nrow(r) == 0){
@@ -122,15 +151,27 @@ dDamage <- foreach(ff = f1) %dopar% {
     }
     else {
         r1 <- r %>%
-            select(contigId, end, pos, CT, GA) %>%
-            pivot_longer(c(CT, GA)) %>%
-            filter((end == "5'" & name == "CT") | (end == "3'" & name == "GA"))
+            filter(nReads > 0) %>%
+            select(contigId, end, pos, all_of(ct), all_of(ga)) %>%
+            pivot_longer(c(all_of(ct), all_of(ga))) %>%
+            filter((end == "5'" & name %in% ct) | (end == "3'" & name %in% ga))
 
-        r2 <- group_by(r1, contigId) %>%
-            summarise(dam5p = value[pos == 0 & name == "CT"], dam3p = value[pos == 0 & name == "GA"], dam5pAvgDecay = mean(diff(value[pos < 5 & name == "CT"])), dam3pAvgDecay = mean(diff(value[pos < 5 & name == "GA"]))) %>%
+        r2 <- group_by(r1, contigId, end, pos) %>%
+            summarise(dam = value[name %in% c("CT", "GA")] / sum(value)) %>%
+            mutate(dam = replace_na(dam, 0)) %>%
+            group_by(contigId) %>%
+            summarise(dam5p = dam[end == "5'" & pos == 0], dam3p = dam[end == "3'" & pos == 0], dam5pAvgDecay = mean(diff(dam[pos < 5 & end == "5'"])), dam3pAvgDecay = mean(diff(dam[pos < 5 & end == "3'"]))) %>%
+            ungroup()
+
+        r21 <- group_by(r1, end, pos) %>%
+            summarise(dam = sum(value[name %in% c("CT", "GA")]) / sum(value)) %>%
+            mutate(dam = replace_na(dam, 0)) %>%
             ungroup() %>%
-            mutate(genusId = s1[1], assemblyId = paste(s1[2:(length(s1) - 5)], collapse = "."))
+            summarise(dam5p = dam[end == "5'" & pos == 0], dam3p = dam[end == "3'" & pos == 0], dam5pAvgDecay = mean(diff(dam[pos < 5 & end == "5'"])), dam3pAvgDecay = mean(diff(dam[pos < 5 & end == "3'"]))) %>%
+            mutate(contigId = "genome")
 
+        r2 <- bind_rows(r2, r21) %>%
+            mutate(genusId = s1[1], assemblyId = paste(s1[2:(length(s1 ) - 5)], collapse = "."))
         select(r2, genusId, assemblyId, contigId, dam5p:dam3pAvgDecay)
     }
 }
