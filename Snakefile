@@ -259,9 +259,11 @@ rule mark_duplicates:
         "benchmarks/{sample}/{genus}.{assembly}.mark_duplicates.txt"
     log:
         "logs/{sample}/{genus}.{assembly}.mark_duplicates.log",
+    threads:
+        8
     shell:
         """
-        java -Xmx16g -jar /willerslev/software/picard/picard.jar MarkDuplicates I={input} O={output.bam} M={output.metrics} 2> {log}
+        java -Xmx16g -XX:ParallelGCThreads={threads} -jar /willerslev/software/picard/picard.jar MarkDuplicates I={input} O={output.bam} M={output.metrics} 2> {log}
         """
 
 
