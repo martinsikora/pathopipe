@@ -134,7 +134,7 @@ checkpoint get_assemblies_sample:
         sample="{sample}",
     shell:
         """
-        zcat {input.tax_ids} | mawk -F'\\t' 'FNR==NR {{ a[$1]; next }} ($2 in a)' <(cut -f1 {input.genfile}) - > {output.tax_ids}
+        gzip -cd {input.tax_ids} | mawk -F'\\t' 'FNR==NR {{ a[$1]; next }} ($2 in a)' <(cut -f1 {input.genfile}) - > {output.tax_ids}
         cat {input.seq_info} | mawk -F'\\t' 'FNR==NR {{ a[$4]; next }} ($2 in a){{print $1"\\t"$3"\\t"$5"\\t"$6}}' {output.tax_ids} - | sort > {output.assembly_ids}
         gzip -cd {input.reportfile} | mawk 'FNR==NR {{ a[$4]; next }} ($7 in a && $8 == "assembly"){{print $9"\\t"$4}}' {output.tax_ids} - | sort > tmp/{params.sample}/assemblies/assemblyCountsObs.txt
         grep -vFwf <(cut -f1 tmp/{params.sample}/assemblies/assemblyCountsObs.txt) tmp/{params.sample}/assemblies/assemblyIds.txt  | mawk '{{print $1"\\t0"}}' > tmp/{params.sample}/assemblies/assemblyCounts0.txt
@@ -161,7 +161,7 @@ rule get_read_ids_targets:
         cat {input.tax_ids} | awk '{{print $4"\\t"$2}}' > {output.ids}
         cat {input.genfile} | awk '{{print $1"\\t"$1}}' >> {output.ids}
         gzip -cd {input.classfile} | mawk 'FNR==NR {{ a[$1]; next }} ($3 in a){{print $3"\\t"$2}}' <(cut -f1 {output.ids}) - | sort -k1,1 -S 128G --parallel={threads} | gzip > {output.classfile} 
-        join <(zcat {output.classfile}) <(sort -k1,1 {output.ids}) | awk '{{print $2"\\t"$3}}' | gzip > {output.read_ids}
+        join <(gzip -cd {output.classfile}) <(sort -k1,1 {output.ids}) | awk '{{print $2"\\t"$3}}' | gzip > {output.read_ids}
         """
 
 
@@ -178,7 +178,7 @@ rule get_reads_genera_all:
         genus="\d+",
     shell:
         """
-        seqtk subseq <(zcat {input.fq}) <(zcat {input.read_ids} | cut -f1) | gzip > {output.fq} 
+        seqtk subseq <(gzip -cdf {input.fq}) <(gzip -cd {input.read_ids} | cut -f1) | gzip > {output.fq} 
         """
 
 
@@ -193,7 +193,7 @@ rule get_read_ids_genus:
         genus="\d+",
     shell:
         """
-        zcat {input.read_ids} | awk '$2 == {wildcards.genus}{{print $1}}' | gzip > {output.read_ids}
+        gzip -cd {input.read_ids} | awk '$2 == {wildcards.genus}{{print $1}}' | gzip > {output.read_ids}
         """
 
 
