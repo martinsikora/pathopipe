@@ -12,3 +12,5 @@ MQ:
   1
 tmp_dir:
   /dev/shm/pathopipe
+picard:
+  /willerslev/software/picard/picard.jar

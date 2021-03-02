@@ -11,6 +11,7 @@ GENFILE = config["genera"]  ## target genera file
 KMERS = config["kmers"]  ## minimum kmers for target assemblies
 MQ = config["MQ"]  ## MQ cutoff for mapped BAMs
 TMP_DIR = config["tmp_dir"]  ## path to location for temporary files
+PICARD = config["picard"]  ## path to location for picard tools jar file
 
 
 ## --------------------------------------------------------------------------------
@@ -263,7 +264,7 @@ rule mark_duplicates:
         4
     shell:
         """
-        java -Xmx16g -XX:ParallelGCThreads={threads} -jar /willerslev/software/picard/picard.jar MarkDuplicates I={input} O={output.bam} M={output.metrics} 2> {log}
+        java -Xmx16g -XX:ParallelGCThreads={threads} -jar {PICARD} MarkDuplicates I={input} O={output.bam} M={output.metrics} 2> {log}
         """
 
 
