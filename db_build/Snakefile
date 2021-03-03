@@ -42,7 +42,7 @@ rule mmi_all:
 ## --------------------------------------------------------------------------------
 ## rules
 
-rule index_mmi: 
+rule index_mmi:
     input:
         get_fasta
     output:
