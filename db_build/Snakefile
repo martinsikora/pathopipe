@@ -42,7 +42,7 @@ rule mmi_all:
 ## --------------------------------------------------------------------------------
 ## rules
 
-rule index_mmi:
+rule index_mmi: 
     input:
         get_fasta
     output:
@@ -51,8 +51,9 @@ rule index_mmi:
         "logs/{ref}.index_mmi.log"
     shell:
         """
-        (minimap2 -k 15 -w 5 -d {output} {input}) 2> {log}
+        (minimap2 -k 15 -w 5 -d {output} {input}) 2> {log} 
         """
+        ## kmer and minimizer window size adapted from default sr preset for better sensitivity for very short reads
         
 rule get_taxinfo:
     input:
@@ -66,6 +67,7 @@ rule get_taxinfo:
         """
         Rscript getTaxInfo.R {threads}
         """
+
         
 rule get_libinfo:
     input:
