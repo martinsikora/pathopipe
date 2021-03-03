@@ -51,7 +51,7 @@ rule index_mmi:
         "logs/{ref}.index_mmi.log"
     shell:
         """
-        (minimap2 -k 15 -w 5 -d {output} {input}) 2> {log} 
+        (minimap2 -k 15 -w 5 -d {output} {input}) 2> {log}
         """
         ## kmer and minimizer window size adapted from default sr preset for better sensitivity for very short reads
         
