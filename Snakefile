@@ -12,6 +12,7 @@ KMERS = config["kmers"]  ## minimum kmers for target assemblies
 MQ = config["MQ"]  ## MQ cutoff for mapped BAMs
 TMP_DIR = config["tmp_dir"]  ## path to location for temporary files
 PICARD = config["picard"]  ## path to location for picard tools jar file
+MM2_PARAM = config["mm2_param"]
 
 
 ## --------------------------------------------------------------------------------
@@ -230,7 +231,7 @@ rule map_minimap2:
         rg="@RG\\tID:{genus}.{sample}\\tSM:{sample}",
     shell:
         """
-        (minimap2 -R '{params.rg}' -t {threads} -x sr -a {input.mmi} {input.fq} | samtools view -F4 -bh > {output.bam}) 2> {log}
+        (minimap2 -R '{params.rg}' -t {threads} {MM2_PARAM} -a {input.mmi} {input.fq} | samtools view -F4 -bh > {output.bam}) 2> {log}
         """
 
 

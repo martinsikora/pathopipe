@@ -14,3 +14,5 @@ tmp_dir:
   /dev/shm/pathopipe
 picard:
   /willerslev/software/picard/picard.jar
+mm2_param:
+  "--sr --frag=yes -A2 -B8 -O12,32 -E2,1 -r50 -p.5 -N20 -f1000,5000 -n2 -m20 -s40 -g200 -2K50m --heap-sort=yes --secondary=no"
