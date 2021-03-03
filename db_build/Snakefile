@@ -1,0 +1,81 @@
+
+import pandas as pd
+import glob
+
+
+## --------------------------------------------------------------------------------
+## helpers
+
+unit_df = pd.read_table("refs.tsv", comment="#").set_index(
+    ["prefix"], drop=False
+)
+REFS = unit_df.index.unique()
+
+
+## --------------------------------------------------------------------------------
+## functions
+
+def get_fasta(wildcards):
+    return unit_df.loc[(wildcards.ref), "fasta"]
+
+
+## --------------------------------------------------------------------------------
+## file sets
+
+mmi_all = expand("minimap2/{ref}.mmi", ref=REFS)
+tables_all = ["taxLists/genus.taxIds.tsv.gz", "taxLists/species.taxIds.tsv.gz", "library.seqInfo.tsv"]
+
+
+## --------------------------------------------------------------------------------
+## targets
+
+rule all:
+    input:
+        mmi_all + tables_all
+
+
+rule mmi_all:
+    input:
+        mmi_all
+
+        
+## --------------------------------------------------------------------------------
+## rules
+
+rule index_mmi:
+    input:
+        get_fasta
+    output:
+        "minimap2/{ref}.mmi"
+    log:
+        "logs/{ref}.index_mmi.log"
+    shell:
+        """
+        (minimap2 -k 15 -w 5 -d {output} {input}) 2> {log}
+        """
+        
+rule get_taxinfo:
+    input:
+        "taxDB"
+    output:
+        "taxLists/genus.taxIds.tsv.gz",
+        "taxLists/species.taxIds.tsv.gz"
+    threads:
+        24
+    shell:
+        """
+        Rscript getTaxInfo.R {threads}
+        """
+        
+rule get_libinfo:
+    input:
+        "taxLists/genus.taxIds.tsv.gz",
+        "taxLists/species.taxIds.tsv.gz"
+    output:
+        "library.seqInfo.tsv"
+    threads:
+        24
+    shell:
+        """
+        Rscript getLibInfo.R {threads}
+        """
