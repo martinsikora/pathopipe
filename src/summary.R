@@ -32,6 +32,10 @@ threads <- as.integer(args[4])
 
 registerDoParallel(threads)
 
+## helper, extract first field of prefix for matching in file name assemblyId parsing
+prefix1 <- strsplit(prefix, "\\.") %>%
+    map_chr(1)
+
 ## coverage
 f1 <- list.files(path = paste("bam/", sampleId, sep = ""), pattern = "genomecov", full.names = TRUE)
 dGc <- foreach(ff = f1) %dopar% {
@@ -75,12 +79,15 @@ dGc <- foreach(ff = f1) %dopar% {
 
         r2 <- bind_rows(r2, r21)
 
+        ## split fields separated by '.' in input file names
         r3 <- gsub(".*\\/", "", ff) %>%
             strsplit("\\.") %>%
             unlist()
-        r2 <- r2 %>%
-            mutate(genusId = r3[1],
-                   assemblyId = paste(r3[2:(length(r3) - 4)], collapse = "."))
+
+        idx <- match(prefix1, r3) ## index of field where prefix starts
+        r2 <- mutate(r2,
+                     genusId = r3[1],
+                     assemblyId = paste(r3[2:(idx - 1)], collapse = "."))
         select(r2, genusId, assemblyId, contigId, contigL, coverageAvg:pContigsCovered)
     }
 }
@@ -154,13 +161,15 @@ dBam <- foreach(ff = f1) %dopar% {
                       ani = 1 - sum(nm)/sum(qwidth))
         r42 <- bind_rows(r42, r421)
 
+        ## split fields separated by '.' in input file names
         r5 <- gsub(".*\\/", "", ff) %>%
             strsplit("\\.") %>%
             unlist()
 
+        idx <- match(prefix1, r5) ## index of field where prefix starts
         r6 <- bind_cols(r41, r42) %>%
             mutate(genusId = r5[1],
-                   assemblyId = paste(r5[2:(length(r5) - 4)], collapse = ".")) %>%
+                   assemblyId = paste(r5[2:(idx - 1)], collapse = ".")) %>%
             select(genusId, assemblyId, contigId, nReads, editDistMode:ani)
         r6
     }
@@ -227,9 +236,10 @@ dDamage <- foreach(ff = f1) %dopar% {
                       dam3pAvgDecay = mean(diff(dam[pos < 5 & end == "3'"]))) %>%
             mutate(contigId = "genome")
 
+        idx <- match(prefix1, s1) ## index of field where prefix starts
         r2 <- bind_rows(r2, r21) %>%
             mutate(genusId = s1[1],
-                   assemblyId = paste(s1[2:(length(s1 ) - 5)], collapse = "."))
+                   assemblyId = paste(s1[2:(idx - 1)], collapse = "."))
         select(r2, genusId, assemblyId, contigId, dam5p:dam3pAvgDecay)
     }
 }
