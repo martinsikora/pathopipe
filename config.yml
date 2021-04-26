@@ -16,3 +16,5 @@ picard:
   /willerslev/software/picard/picard.jar
 mm2_param:
   "-x sr"
+targets_priority:
+  targets_priority.tsv
