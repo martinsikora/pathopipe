@@ -17,6 +17,7 @@ suppressMessages(library(tidyr))
 suppressMessages(library(tibble))
 suppressMessages(library(ggrepel))
 suppressMessages(library(scales))
+suppressMessages(library(ggh4x))
 
 
 ## --------------------------------------------------------------------------------
@@ -44,49 +45,80 @@ d1 <- d %>%
     filter(genusId %in% tP$X1)
 write_tsv(d1, path = paste("tables/", prefix, ".targets_priority.summary.tsv.gz", sep = ""))
 
+
+## --------------------------------------------------------------------------------
 ## plot aniRank 1 taxa across prioritize samples
-idxS <- d1 %>%
+
+## find max number of reads for all species/sample combinations
+d2 <- d1 %>%
+    filter(contigId == "genome") %>%
+    group_by(sampleId, genusId) %>%
+    summarise(nReads = max(nReads, na.rm = TRUE)) %>%
+    ungroup()
+
+
+## redo ANI ranking split into genera with >100 reads or less
+d21 <- d2 %>%
+    filter(nReads < 100) %>%
+    select(-nReads) %>%
+    left_join(d1) %>%
+    filter(contigId == "genome")
+
+d22 <- d2 %>%
+    filter(nReads > 100) %>%
+    select(-nReads) %>%
+    left_join(d1) %>%
+    filter(contigId == "genome", nReads > 100) %>%
+    group_by(sampleId, genusId) %>%
+    mutate(aniRank = rank(desc(ani))) %>%
+    ungroup()
+
+
+## find unique species name with ANI rank 1
+idxS <- bind_rows(d21, d22) %>%
     filter(aniRank < 2) %>%
     pull(taxNameSpecies) %>%
     unique()
 
-d2 <- d %>%
-    filter(taxNameSpecies %in% idxS,
-           coverageP >= 0.001) %>%
+
+## set up plot data
+d3 <- d %>%
+    filter(taxNameSpecies %in% idxS) %>%
     mutate(damClass = case_when(
                dam5p >= 0.1 ~ "dam5p_010",
                dam5p >= 0.05 ~ "dam5p_005",
                TRUE ~ "dam5p_low"
            ))
 
-w <- d2$contigId %>%
+w <- d3$contigId %>%
     unique() %>%
     length() %/% 8 + 2
 
-h <- d2$sampleId %>%
+h <- d3$sampleId %>%
     unique() %>%
     length() %/% 2 + 4
 
 idxC <- c("black", "grey", "white")
 names(idxC) <- c("dam5p_010", "dam5p_005", "dam5p_low")
 
-d21 <- filter(d2, aniRank < 2)
+d31 <- bind_rows(d21, d22) %>%
+    filter(aniRank < 2)
 
 pdf(paste("plots/", prefix, ".targets_priority.matrix.pdf", sep = ""), width = w, height = h)
-p <- ggplot(d2, aes(x = contigId,
+p <- ggplot(d3, aes(x = contigId,
                     y = sampleId,
                     fill = ani,
                     colour = damClass,
                     size = coverageP))
 p +
     geom_point(shape = 22) +
-    geom_point(shape = 4, color = "black", stroke = 0.25, data = d21) +
+    geom_point(shape = 4, color = "black", stroke = 0.25, data = d31) +
     scale_fill_viridis(name = "ANI", option = "C") +
     scale_colour_manual(name = "Damage", values = idxC) +
-    scale_size_continuous("Genome coverage", range = c(0.2, 2.5)) +
+    scale_size_continuous("Genome coverage", range = c(0.2, 3)) +
     xlab("Contig") +
     ylab("Sample") +
-    facet_grid(. ~ taxNameSpecies, scales = "free_x", space = "free") +
+    facet_nested(. ~ genusId + taxNameSpecies, scales = "free_x", space = "free", nest_line = TRUE) +
     theme_bw() +
     theme(panel.grid.major = element_line(linetype = "dotted", size = 0.25),
           panel.grid.minor = element_blank(),
@@ -94,17 +126,17 @@ p +
           strip.text.x = element_text(angle = 90, hjust = 0, vjust = 0.5, size = 6),
           axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 6),
           axis.text.y = element_text(size = 6),
-          panel.spacing = unit(0, "lines"),
+          panel.spacing = unit(0.2, "lines"),
           aspect.ratio = 1)
 p +
     geom_point(shape = 22) +
-    geom_point(shape = 4, color = "black", stroke = 0.25, data = d21) +
+    geom_point(shape = 4, color = "black", stroke = 0.25, data = d31) +
     scale_fill_viridis(name = "ANI", option = "C") +
     scale_colour_manual(name = "Damage", values = idxC) +
-    scale_size_continuous("Genome coverage", range = c(0.2, 3), limits = c(1e-3, 1), trans = "log10") +
+    scale_size_continuous("Genome coverage", range = c(0.2, 3), trans = "log10") +
     xlab("Contig") +
     ylab("Sample") +
-    facet_grid(. ~ taxNameSpecies, scales = "free_x", space = "free") +
+    facet_nested(. ~ genusId + taxNameSpecies, scales = "free_x", space = "free", nest_line = TRUE) +
     theme_bw() +
     theme(panel.grid.major = element_line(linetype = "dotted", size = 0.25),
           panel.grid.minor = element_blank(),
@@ -112,32 +144,30 @@ p +
           strip.text.x = element_text(angle = 90, hjust = 0, vjust = 0.5, size = 6),
           axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 6),
           axis.text.y = element_text(size = 6),
-          panel.spacing = unit(0, "lines"),
+          panel.spacing = unit(0.2, "lines"),
           aspect.ratio = 1)
 dev.off()
 
 xBreaks <- c(1e-4, 1e-3, 1e-2, 1e-1, 1)
 
 pdf(paste("plots/", prefix, ".targets_priority.pdf", sep = ""), width = 9, height = 7)
-for(x in unique(d2$sampleId)) {
-    d3 <- d2 %>%
+for(x in unique(d3$sampleId)) {
+    d4 <- d3 %>%
         filter(sampleId == x, contigId == "genome")
 
-    d31 <- d3 %>%
-        filter(nReads >= 100,
-               dam5p >= 0.05,
-               coverageP >= 0.001)
+    d41 <- d4 %>%
+        filter((nReads >= 100 & dam5p >= 0.05 & coverageP >= 0.005) | coverageP >= 0.1)
 
-    p <- ggplot(d3, aes(x = coverageP, y = dam5p))
+    p <- ggplot(d4, aes(x = coverageP, y = dam5p))
     print(p +
           geom_hline(yintercept = c(0.05, 0.1), size = 0.25, color = c("grey", "black"), linetype = "dashed") +
           geom_point(aes(fill = ani, size = nReads), colour = "black", stroke = 0.25, shape = 21) +
-          geom_text_repel(aes(label = taxNameSpecies), size = 1.5, segment.size = 0.25, data = d31) +
+          geom_text_repel(aes(label = taxNameSpecies), size = 1.5, segment.size = 0.25, data = d41) +
           scale_fill_viridis(name = "ANI", option = "C") +
           scale_size_continuous("Number of reads", range = c(1, 5)) +
           scale_x_continuous(breaks = xBreaks, trans = "log10", labels = trans_format("log10", math_format(10^.x))) +
           annotation_logticks(sides = "b") +
-          coord_cartesian(xlim = c(0.0001, 1), ylim = c(0, 0.5)) +
+          coord_cartesian(xlim = c(1e-4, 1), ylim = c(0, 0.5)) +
           xlab("Fraction of genome covered") +
           ylab("5' C>T damage") +
           theme_bw() +
