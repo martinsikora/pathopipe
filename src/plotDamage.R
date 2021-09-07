@@ -20,15 +20,20 @@ suppressMessages(library(purrr))
 ## command line arguments
 
 args <- commandArgs(trailingOnly = TRUE)
-dbPath <- args[1]
-outPdf <- args[2]
-infiles <- args[-1:-2]
+prefix <- args[1]
+dbPath <- args[2]
+outPdf <- args[3]
+infiles <- args[-1:-3]
 
 
 ## --------------------------------------------------------------------------------
 ## taxInfo
 
 seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "cccccccc")
+
+## helper, extract first field of prefix for matching in file name assemblyId parsing
+prefix1 <- strsplit(prefix, "\\.") %>%
+    map_chr(1)
 
 
 ## --------------------------------------------------------------------------------
@@ -46,7 +51,8 @@ d <- foreach(f1 = infiles) %do% {
         strsplit("\\.") %>%
         unlist()
 
-    assemblyId <- paste(s1[2:(length(s1) - 5)], collapse = ".")
+    idx <- match(prefix1, s1) ## index of field where prefix starts
+    assemblyId <- paste(s1[2:(idx - 1)], collapse = ".")
 
     p <- pipe(paste("metadamage print -countout -howmany 25 -bam ", bam, " ", f1))
     r <- read_tsv(p, col_names = hdr, col_types = "cdcidddddddddddddddd", skip = 1)
@@ -57,7 +63,8 @@ d <- foreach(f1 = infiles) %do% {
         summarise(value = sum(value)) %>%
         mutate(p = value / sum(value)) %>%
         ungroup() %>%
-        mutate(assemblyId = assemblyId, taxNameSpecies = seqInfo$taxNameSpecies[match(assemblyId, seqInfo$assemblyId)])
+        mutate(assemblyId = assemblyId,
+               taxNameSpecies = seqInfo$taxNameSpecies[match(assemblyId, seqInfo$assemblyId)])
     r1
 }
 d <- bind_rows(d)
@@ -90,6 +97,10 @@ if(nrow(d) == 0){
       coord_cartesian(ylim = c(0, 0.3)) +
       scale_color_manual(values = idxSt) +
       theme_bw() +
-      theme(strip.background = element_blank(), panel.grid.major = element_line(linetype = "dotted", size = 0.25), panel.grid.minor = element_blank(), strip.text.y = element_text(angle = 0, hjust = 0), legend.position = "none"))
+      theme(strip.background = element_blank(),
+            panel.grid.major = element_line(linetype = "dotted", size = 0.25),
+            panel.grid.minor = element_blank(),
+            strip.text.y = element_text(angle = 0, hjust = 0),
+            legend.position = "none"))
     dev.off()
 }

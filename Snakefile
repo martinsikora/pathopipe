@@ -109,7 +109,7 @@ rule get_genera_sample:
         reportfile="report/{sample}." + PREFIX + ".krakenuniq.report.tsv.gz",
         genfile=GENFILE,
     output:
-        "tmp/{sample}/genera.txt",
+        "taxlists/{sample}/genera.txt",
     wildcard_constraints:
         genus="\d+",
     params:
@@ -122,34 +122,34 @@ rule get_genera_sample:
 
 checkpoint get_assemblies_sample:
     input:
-        genfile="tmp/{sample}/genera.txt",
+        genfile="taxlists/{sample}/genera.txt",
         reportfile="report/{sample}." + PREFIX + ".krakenuniq.report.tsv.gz",
         tax_ids=DB + "/taxLists/genus.taxIds.tsv.gz",
         seq_info=DB + "/library.seqInfo.tsv",
     output:
-        directory("tmp/{sample}/assemblies/"),
-        tax_ids="tmp/{sample}/assemblies/taxIds.txt",
-        assembly_ids="tmp/{sample}/assemblies/assemblyIds.txt",
-        assembly_counts="tmp/{sample}/assemblies/assemblyCounts.txt",
+        directory("taxlists/{sample}/assemblies/"),
+        tax_ids="taxlists/{sample}/assemblies/taxIds.txt",
+        assembly_ids="taxlists/{sample}/assemblies/assemblyIds.txt",
+        assembly_counts="taxlists/{sample}/assemblies/assemblyCounts.txt",
     params:
         sample="{sample}",
     shell:
         """
         gzip -cd {input.tax_ids} | mawk -F'\\t' 'FNR==NR {{ a[$1]; next }} ($2 in a)' <(cut -f1 {input.genfile}) - > {output.tax_ids}
         cat {input.seq_info} | mawk -F'\\t' 'FNR==NR {{ a[$4]; next }} ($2 in a){{print $1"\\t"$3"\\t"$5"\\t"$6}}' {output.tax_ids} - | sort > {output.assembly_ids}
-        gzip -cd {input.reportfile} | mawk 'FNR==NR {{ a[$4]; next }} ($7 in a && $8 == "assembly"){{print $9"\\t"$4}}' {output.tax_ids} - | sort > tmp/{params.sample}/assemblies/assemblyCountsObs.txt
-        grep -vFwf <(cut -f1 tmp/{params.sample}/assemblies/assemblyCountsObs.txt) tmp/{params.sample}/assemblies/assemblyIds.txt  | mawk '{{print $1"\\t0"}}' > tmp/{params.sample}/assemblies/assemblyCounts0.txt
-        cat tmp/{params.sample}/assemblies/assemblyCountsObs.txt tmp/{params.sample}/assemblies/assemblyCounts0.txt | sort > {output.assembly_counts}
-        join {output.assembly_ids} {output.assembly_counts} | sort -k3,3 -k2,2 -rnk5,5 | tr ' ' '\\t' | datamash -g2 first 1 first 3 | awk '{{print >"tmp/{params.sample}/assemblies/"$3"."$2".id"}}'
-        cat tmp/{params.sample}/assemblies/*.id | cut -f3 | sort | uniq | awk '{{print >"tmp/{params.sample}/assemblies/"$1".genus"}}'
+        gzip -cd {input.reportfile} | mawk 'FNR==NR {{ a[$4]; next }} ($7 in a && $8 == "assembly"){{print $9"\\t"$4}}' {output.tax_ids} - | sort > taxlists/{params.sample}/assemblies/assemblyCountsObs.txt
+        grep -vFwf <(cut -f1 taxlists/{params.sample}/assemblies/assemblyCountsObs.txt) taxlists/{params.sample}/assemblies/assemblyIds.txt  | mawk '{{print $1"\\t0"}}' > taxlists/{params.sample}/assemblies/assemblyCounts0.txt
+        cat taxlists/{params.sample}/assemblies/assemblyCountsObs.txt taxlists/{params.sample}/assemblies/assemblyCounts0.txt | sort > {output.assembly_counts}
+        join {output.assembly_ids} {output.assembly_counts} | sort -k3,3 -k2,2 -rnk5,5 | tr ' ' '\\t' | datamash -g2 first 1 first 3 | awk '{{print >"taxlists/{params.sample}/assemblies/"$3"."$2".id"}}'
+        cat taxlists/{params.sample}/assemblies/*.id | cut -f3 | sort | uniq | awk '{{print >"taxlists/{params.sample}/assemblies/"$1".genus"}}'
         """
 
 
 rule get_read_ids_targets:
     input:
         classfile="classify/{sample}." + PREFIX + ".krakenuniq.class.tsv.gz",
-        tax_ids="tmp/{sample}/assemblies/taxIds.txt",
-        genfile="tmp/{sample}/genera.txt",
+        tax_ids="taxlists/{sample}/assemblies/taxIds.txt",
+        genfile="taxlists/{sample}/genera.txt",
     output:
         ids=temp(TMP_DIR + "/{sample}/targets.taxIds.txt"),
         classfile=temp(TMP_DIR + "/{sample}/targets.class.tsv.gz"),
@@ -425,7 +425,7 @@ rule plot_edit_dist:
         genus="\d+",
     shell:
         """
-        Rscript src/plotEditDist.R {DB} {output.pdf} {output.tsv} {input}
+        Rscript src/plotEditDist.R {PREFIX} {DB} {output.pdf} {output.tsv} {input}
         """
 
 
@@ -454,7 +454,7 @@ rule plot_damage:
         genus="\d+",
     shell:
         """
-        Rscript src/plotDamage.R {DB} {output.pdf} {input}
+        Rscript src/plotDamage.R {PREFIX} {DB} {output.pdf} {input}
         """
 
 
