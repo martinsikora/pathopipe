@@ -28,7 +28,7 @@ threads <- as.integer(args[4])
 
 
 ## --------------------------------------------------------------------------------
-## process tables and summarise
+## helpers
 
 registerDoParallel(threads)
 
@@ -36,18 +36,31 @@ registerDoParallel(threads)
 prefix1 <- strsplit(prefix, "\\.") %>%
     map_chr(1)
 
-## coverage
-f1 <- list.files(path = paste("bam/", sampleId, sep = ""), pattern = "genomecov", full.names = TRUE)
+seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "cccccccc")
+
+
+## --------------------------------------------------------------------------------
+## genome coverage summary
+
+f1 <- list.files(path = paste("bam/", sampleId, sep = ""),
+                 pattern = "genomecov",
+                 full.names = TRUE)
 dGc <- foreach(ff = f1) %dopar% {
-    r1 <- read_tsv(ff, col_type = "ciddd", col_names = c("contigId", "dp", "count", "l", "p"))
+    r1 <- read_tsv(ff,
+                   col_type = "ciddd",
+                   col_names = c("contigId", "dp", "count", "l", "p"))
     if(nrow(r1) == 0){
         NULL
     } else {
 
         ## find contigs with coverage
-        r11 <- filter(r1, dp > 0, contigId != "genome") %>%
+        r11 <- r1 %>%
+            filter(dp > 0,
+                   contigId != "genome") %>%
             distinct(contigId)
-        nContigs = r1$contigId %>%
+
+        nContigs <- r1 %>%
+            pull(contigId) %>%
             unique() %>%
             length() -1
 
@@ -59,8 +72,8 @@ dGc <- foreach(ff = f1) %dopar% {
                       coverageAvg = sum(dp * count) / contigL,
                       coverageSd = sqrt(sum((dp - coverageAvg)^2*count)/sum(count)),
                       coverageBp = sum(count[dp>0]), coverageP = 1 - p[1],
-                      coveragePExp = 1 - exp(-0.883 * coverageAvg),
-                      deltaCoverageP = coveragePExp - coverageP,
+                      coveragePExp = 1 - exp(-coverageAvg),
+                      coveragePRatio = coverageP / coveragePExp,
                       coverageCv = coverageSd / coverageAvg,
                       coverageEvennessScore = 1 - sum((ceiling(coverageAvg) - dp[dp <= ceiling(coverageAvg)])*count[dp <= ceiling(coverageAvg)] / (ceiling(coverageAvg) * contigL)))
 
@@ -71,8 +84,9 @@ dGc <- foreach(ff = f1) %dopar% {
                       coverageAvg = sum(dp * count) / contigL,
                       coverageSd = sqrt(sum((dp - coverageAvg)^2*count)/sum(count)),
                       coverageBp = sum(count[dp>0]), coverageP = 1 - p[1],
-                      coveragePExp = 1 - exp(-0.883 * coverageAvg),
-                      deltaCoverageP = coveragePExp - coverageP, coverageCv = coverageSd / coverageAvg,
+                      coveragePExp = 1 - exp(-coverageAvg),
+                      coveragePRatio = coverageP / coveragePExp,
+                      coverageCv = coverageSd / coverageAvg,
                       coverageEvennessScore = 1 - sum((ceiling(coverageAvg) - dp[dp <= ceiling(coverageAvg)])*count[dp <= ceiling(coverageAvg)] / (ceiling(coverageAvg) * contigL))) %>%
             mutate(nContigs = nContigs,
                    pContigsCovered = nrow(r11) / nContigs)
@@ -80,21 +94,25 @@ dGc <- foreach(ff = f1) %dopar% {
         r2 <- bind_rows(r2, r21)
 
         ## split fields separated by '.' in input file names
-        r3 <- gsub(".*\\/", "", ff) %>%
+        r3 <- ff %>%
+            gsub(".*\\/", "", .) %>%
             strsplit("\\.") %>%
             unlist()
 
         idx <- match(prefix1, r3) ## index of field where prefix starts
-        r2 <- mutate(r2,
-                     genusId = r3[1],
-                     assemblyId = paste(r3[2:(idx - 1)], collapse = "."))
+        r2 <- r2 %>%
+            mutate(genusId = r3[1],
+                   assemblyId = paste(r3[2:(idx - 1)], collapse = "."))
+
         select(r2, genusId, assemblyId, contigId, contigL, coverageAvg:pContigsCovered)
     }
 }
 dGc <- bind_rows(dGc)
 
 
+## --------------------------------------------------------------------------------
 ## bam stats
+
 f1 <- list.files(path = paste("bam/", sampleId, sep = ""), pattern = "filter.bam$", full.names = TRUE)
 dBam <- foreach(ff = f1) %dopar% {
 
@@ -111,12 +129,15 @@ dBam <- foreach(ff = f1) %dopar% {
                    rname = as.character(rname))
 
         ## parse cigar string to count number of soft-clipped bases; map function converts all non-S containing cigar fields into NA
-        r21 <- gsub("([A-Z])", "\\1.", r2$cigar) %>%
+        r21 <- r2 %>%
+            pull(cigar) %>%
+            gsub("([A-Z])", "\\1.", .) %>%
             strsplit("\\.") %>%
             map(function(x) as.integer(gsub("S", "", x)) %>%
                             sum(na.rm = TRUE)) %>%
             as.integer()
-        r2 <- mutate(r2, nSoftClip = r21)
+        r2 <- r2 %>%
+            mutate(nSoftClip = r21)
 
         ## generate final summary tibble
         r3 <- gsub(".*\\/", "", f1)
@@ -162,7 +183,8 @@ dBam <- foreach(ff = f1) %dopar% {
         r42 <- bind_rows(r42, r421)
 
         ## split fields separated by '.' in input file names
-        r5 <- gsub(".*\\/", "", ff) %>%
+        r5 <- ff %>%
+            gsub(".*\\/", "", .) %>%
             strsplit("\\.") %>%
             unlist()
 
@@ -183,10 +205,22 @@ dB1 <- dBam %>%
     ungroup() %>%
     select(assemblyId, contigId, aniRank)
 
-dBam <- dBam %>%
-    left_join(dB1)
+dB2 <- dBam %>%
+    filter(contigId == "genome",
+           nReads >= 100) %>%
+    group_by(genusId) %>%
+    mutate(aniRank100 = rank(dplyr::desc(ani))) %>%
+    ungroup() %>%
+    select(assemblyId, contigId, aniRank100)
 
+dBam <- dBam %>%
+    left_join(dB1) %>%
+    left_join(dB2)
+
+
+## --------------------------------------------------------------------------------
 ## damage
+
 hdr <- c("contigId", "nReads", "end", "pos", "AA", "AC", "AG", "AT", "CA", "CC", "CG", "CT", "GA", "GC", "GG", "GT", "TA", "TC", "TG", "TT")
 
 f1 <- list.files(path = paste("metadamage/", sampleId, sep = ""), pattern = "bdamage.gz$", full.names = TRUE)
@@ -245,29 +279,60 @@ dDamage <- foreach(ff = f1) %dopar% {
 }
 dDamage <- bind_rows(dDamage)
 
-## taxInfo
-seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "cccccccc")
-s1 <- filter(seqInfo, assemblyId %in% dGc$assemblyId) %>% select(assemblyId, taxId, taxIdSpecies, taxNameSpecies)
 
+## --------------------------------------------------------------------------------
+## taxInfo
+
+
+## --------------------------------------------------------------------------------
+## krakenUniq results
+
+f1 <- paste("report/", sampleId, ".", prefix, ".krakenuniq.report.tsv.gz", sep = "")
+
+r1 <- read_tsv(f1, c("freq", "nClade", "nTaxon", "nKmer", "dup", "cov", "taxId", "taxRank", "name"), col_types = "ddddddccc", skip = 4)
+s2 <- seqInfo %>%
+    distinct(taxIdSpecies, taxNameSpecies, taxIdGenus, taxNameGenus)
+
+dKraken <- r1 %>%
+    filter(taxRank == "species") %>%
+    left_join(s2, by = c("taxId" = "taxIdSpecies")) %>%
+    select(taxIdGenus, taxNameGenus, taxId, name, nClade, nKmer, dup) %>%
+    group_by(taxIdGenus) %>%
+    mutate(kmerRank = rank(-nKmer)) %>%
+    ungroup() %>%
+    select(taxId, nClade:kmerRank)
+
+colnames(dKraken) <- c("taxIdSpecies", "krakenNClade", "krakenNKmer", "krakenDupRate", "krakenKmerRank")
+
+
+## --------------------------------------------------------------------------------
 ## final result table
+
+s1 <- filter(seqInfo, assemblyId %in% dGc$assemblyId) %>%
+    select(assemblyId, taxId, taxIdSpecies, taxNameSpecies)
+
 res <- left_join(dGc, dBam, by = c("genusId", "assemblyId", "contigId")) %>%
     left_join(dDamage, by = c("genusId", "assemblyId", "contigId")) %>%
     mutate(sampleId = sampleId, flag = "") %>%
     left_join(s1, by = "assemblyId") %>%
-    select(sampleId, genusId, taxIdSpecies, taxNameSpecies, assemblyId:dam3pAvgDecay, flag) %>%
+    left_join(dKraken) %>%
+    select(sampleId, genusId, taxIdSpecies, taxNameSpecies, assemblyId:dam3pAvgDecay, krakenNClade:krakenKmerRank, flag) %>%
     filter(!is.na(nReads))
 
 idx <- res$dam5p >= 0.1 & res$dam5pAvgDecay < 0
-idx1 <- res$editDistAvg <= 1.5 & res$editDistAvgDecay < 0
-idx2 <- res$editDistDecayEnd >= 5
-idx3 <- res$mqAvg >= 20
-res$flag[idx & !idx1 & !idx2] <- "damage_0.1"
-res$flag[!idx & idx1 & !idx2] <- "editDistAvg_1.5"
-res$flag[!idx & !idx1 & idx2] <- "editDistDecay_5"
-res$flag[idx & idx1 & !idx2] <- "damage_0.1;editDistAvg_1.5"
-res$flag[idx & !idx1 & idx2] <- "damage_0.1;editDistDecay_5"
-res$flag[!idx & idx1 & idx2] <- "editDistAvg_1.5;editDistDecay_5"
-res$flag[idx & idx1 & idx2] <- "damage_0.1;editDistAvg_1.5;editDistDecay_5"
-res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.1;editDistAvg_1.5;editDistDecay_5;mqAvg_20"
+idx1 <- res$aniRank100 < 2
+idx2 <- res$coveragePRatio >= 0.9
+idx3 <- res$krakenKmerRank < 2 & !is.na(res$krakenKmerRank)
+
+res$flag[idx & !idx1 & !idx2 & !idx3] <- "damage_0.1"
+res$flag[!idx & idx1 & !idx2 & !idx3] <- "aniRank100_1"
+res$flag[!idx & !idx1 & idx2 & !idx3] <- "coveragePRatio_0.9"
+res$flag[!idx & !idx1 & !idx2 & idx3] <- "krakenKmerRank_1"
+res$flag[idx & idx1 & !idx2 & !idx3] <- "damage_0.1;aniRank100_1"
+res$flag[idx & !idx1 & idx2 & !idx3] <- "damage_0.1;coveragePRatio_0.9"
+res$flag[idx & !idx1 & !idx2 & idx3] <- "damage_0.1;krakenKmerRank_1"
+res$flag[idx & idx1 & idx2 & !idx3] <- "damage_0.1;aniRank100_1;coveragePRatio_0.9"
+res$flag[idx & idx1 & !idx2 & idx3] <- "damage_0.1;aniRank100_1;krakenKmerRank_1"
+res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.1;aniRank100_1;coveragePRatio_0.9;krakenKmerRank_1"
 
 write_tsv(res, path = paste("tables/", sampleId, "/", prefix, ".summary.tsv.gz", sep = ""), na = "NaN")

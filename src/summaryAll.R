@@ -33,17 +33,17 @@ files <- args[-1:-2]
 ## process tables and summarise
 
 d <- foreach(f = files) %do% {
-    r <- read_tsv(f, col_types = "ccccccdddddddddddddddddddddddddc")
+    r <- read_tsv(f, col_types = "ccccccddddddddddddddddddddddddddc")
     r
 }
 d <- bind_rows(d)
-write_tsv(d, path = paste("tables/", prefix, ".summary.tsv.gz", sep = ""))
+write_tsv(d, file = paste("tables/", prefix, ".summary.tsv.gz", sep = ""))
 
 tP <- read_tsv(targetsPriority, col_names = FALSE)
 
 d1 <- d %>%
     filter(genusId %in% tP$X1)
-write_tsv(d1, path = paste("tables/", prefix, ".targets_priority.summary.tsv.gz", sep = ""))
+write_tsv(d1, file = paste("tables/", prefix, ".targets_priority.summary.tsv.gz", sep = ""))
 
 
 ## --------------------------------------------------------------------------------
@@ -96,7 +96,7 @@ w <- d3$contigId %>%
 
 h <- d3$sampleId %>%
     unique() %>%
-    length() %/% 2 + 4
+    length() %/% 2 + 6
 
 idxC <- c("black", "grey", "white")
 names(idxC) <- c("dam5p_010", "dam5p_005", "dam5p_low")
