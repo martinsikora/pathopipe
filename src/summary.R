@@ -281,10 +281,6 @@ dDamage <- bind_rows(dDamage)
 
 
 ## --------------------------------------------------------------------------------
-## taxInfo
-
-
-## --------------------------------------------------------------------------------
 ## krakenUniq results
 
 f1 <- paste("report/", sampleId, ".", prefix, ".krakenuniq.report.tsv.gz", sep = "")
@@ -321,18 +317,23 @@ res <- left_join(dGc, dBam, by = c("genusId", "assemblyId", "contigId")) %>%
 
 idx <- res$dam5p >= 0.1 & res$dam5pAvgDecay < 0
 idx1 <- res$aniRank100 < 2
-idx2 <- res$coveragePRatio >= 0.9
+idx2 <- res$coveragePRatio >= 0.8
 idx3 <- res$krakenKmerRank < 2 & !is.na(res$krakenKmerRank)
 
 res$flag[idx & !idx1 & !idx2 & !idx3] <- "damage_0.1"
 res$flag[!idx & idx1 & !idx2 & !idx3] <- "aniRank100_1"
-res$flag[!idx & !idx1 & idx2 & !idx3] <- "coveragePRatio_0.9"
+res$flag[!idx & !idx1 & idx2 & !idx3] <- "coveragePRatio_0.8"
 res$flag[!idx & !idx1 & !idx2 & idx3] <- "krakenKmerRank_1"
+
 res$flag[idx & idx1 & !idx2 & !idx3] <- "damage_0.1;aniRank100_1"
-res$flag[idx & !idx1 & idx2 & !idx3] <- "damage_0.1;coveragePRatio_0.9"
+res$flag[idx & !idx1 & idx2 & !idx3] <- "damage_0.1;coveragePRatio_0.8"
 res$flag[idx & !idx1 & !idx2 & idx3] <- "damage_0.1;krakenKmerRank_1"
-res$flag[idx & idx1 & idx2 & !idx3] <- "damage_0.1;aniRank100_1;coveragePRatio_0.9"
+
+res$flag[!idx & idx1 & idx2 & !idx3] <- "aniRank100_1;coveragePRatio_0.8"
+res$flag[!idx & idx1 & idx2 & idx3] <- "aniRank100_1;coveragePRatio_0.8;krakenKmerRank_1"
+
+res$flag[idx & idx1 & idx2 & !idx3] <- "damage_0.1;aniRank100_1;coveragePRatio_0.8"
 res$flag[idx & idx1 & !idx2 & idx3] <- "damage_0.1;aniRank100_1;krakenKmerRank_1"
-res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.1;aniRank100_1;coveragePRatio_0.9;krakenKmerRank_1"
+res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.1;aniRank100_1;coveragePRatio_0.8;krakenKmerRank_1"
 
 write_tsv(res, path = paste("tables/", sampleId, "/", prefix, ".summary.tsv.gz", sep = ""), na = "NaN")
