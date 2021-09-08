@@ -320,20 +320,23 @@ idx1 <- res$aniRank100 < 2
 idx2 <- res$coveragePRatio >= 0.8
 idx3 <- res$krakenKmerRank < 2 & !is.na(res$krakenKmerRank)
 
-res$flag[idx & !idx1 & !idx2 & !idx3] <- "damage_0.1"
-res$flag[!idx & idx1 & !idx2 & !idx3] <- "aniRank100_1"
-res$flag[!idx & !idx1 & idx2 & !idx3] <- "coveragePRatio_0.8"
-res$flag[!idx & !idx1 & !idx2 & idx3] <- "krakenKmerRank_1"
+res$flag[idx] <- "damage_0.1"
+res$flag[idx1] <- "aniRank100_1"
+res$flag[idx2] <- "coveragePRatio_0.8"
+res$flag[idx3] <- "krakenKmerRank_1"
 
-res$flag[idx & idx1 & !idx2 & !idx3] <- "damage_0.1;aniRank100_1"
-res$flag[idx & !idx1 & idx2 & !idx3] <- "damage_0.1;coveragePRatio_0.8"
-res$flag[idx & !idx1 & !idx2 & idx3] <- "damage_0.1;krakenKmerRank_1"
+res$flag[idx & idx1] <- "damage_0.1;aniRank100_1"
+res$flag[idx & idx2] <- "damage_0.1;coveragePRatio_0.8"
+res$flag[idx & idx3] <- "damage_0.1;krakenKmerRank_1"
+res$flag[idx1 & idx2] <- "aniRank100_1;coveragePRatio_0.8"
+res$flag[idx1 & idx3] <- "aniRank100_1;krakenKmerRank_1"
+res$flag[idx2 & idx3] <- "coveragePRatio_0.8;krakenKmerRank_1"
 
-res$flag[!idx & idx1 & idx2 & !idx3] <- "aniRank100_1;coveragePRatio_0.8"
-res$flag[!idx & idx1 & idx2 & idx3] <- "aniRank100_1;coveragePRatio_0.8;krakenKmerRank_1"
+res$flag[idx & idx1 & idx2] <- "damage_0.1;aniRank100_1;coveragePRatio_0.8"
+res$flag[idx & idx1 & idx3] <- "damage_0.1;aniRank100_1;krakenKmerRank_1"
+res$flag[idx & idx2 & idx3] <- "damage_0.1;coveragePRatio_0.8;krakenKmerRank_1"
+res$flag[idx1 & idx2 & idx3] <- "aniRank100_1;coveragePRatio_0.8;krakenKmerRank_1"
 
-res$flag[idx & idx1 & idx2 & !idx3] <- "damage_0.1;aniRank100_1;coveragePRatio_0.8"
-res$flag[idx & idx1 & !idx2 & idx3] <- "damage_0.1;aniRank100_1;krakenKmerRank_1"
 res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.1;aniRank100_1;coveragePRatio_0.8;krakenKmerRank_1"
 
 write_tsv(res, path = paste("tables/", sampleId, "/", prefix, ".summary.tsv.gz", sep = ""), na = "NaN")
