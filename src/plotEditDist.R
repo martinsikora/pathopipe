@@ -81,18 +81,18 @@ th <- theme_bw() +
           legend.text = element_text(size = 3),
           panel.grid.minor = element_blank())
 
-d1 <- d %>%
-    group_by(assemblyId) %>%
-    summarise(nTot = sum(n))
-
-d <- d %>%
-    left_join(d1)
-
 if(nrow(d) == 0){
     pdf(outPdf, width = 10, height = 4)
     dev.off()
 } else {
-    d <- mutate(d, lab = paste(assemblyId, taxNameSpecies, sep = " | "))
+    d1 <- d %>%
+        group_by(assemblyId) %>%
+        summarise(nTot = sum(n))
+
+    d <- d %>%
+        left_join(d1) %>%
+        mutate(lab = paste(assemblyId, taxNameSpecies, sep = " | "))
+
     pdf(outPdf, width = 14, height = 5)
     p <- ggplot(d, aes(x = editDist,
                        y = p,
