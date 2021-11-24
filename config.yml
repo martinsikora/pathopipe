@@ -9,7 +9,7 @@ db:
 kmers:
   50
 MQ:
-  1
+  20
 tmp_dir:
   /dev/shm/pathopipe
 picard:
