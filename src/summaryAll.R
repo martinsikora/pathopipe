@@ -33,7 +33,7 @@ files <- args[-1:-2]
 ## process tables and summarise
 
 d <- foreach(f = files) %do% {
-    r <- read_tsv(f, col_types = "ccccccddddddddddddddddddddddddddc")
+    r <- read_tsv(f, col_types = "ccccccddddddddddddddddddddddddddddddc", na = c("", "NA", "NaN"))
     r
 }
 d <- bind_rows(d)
@@ -47,12 +47,13 @@ write_tsv(d1, file = paste("tables/", prefix, ".targets_priority.summary.tsv.gz"
 
 
 ## --------------------------------------------------------------------------------
-## plot matrix of candidates with aniRank 1 and damage
+## plot matrix of candidates with krakenKmerRank < 3 and damage
 
-## find unique species name with ANI rank 1
+## find unique species name with krakenKmerRank < 3
 idxS <- d1 %>%
-    filter(aniRank100 < 2,
-           dam5p >= 0.1) %>%
+    filter(krakenKmerRank < 3,
+           dam5p >= 0.1,
+           !is.na(aniRank100)) %>%
     pull(taxNameSpecies) %>%
     unique()
 
@@ -63,7 +64,12 @@ d3 <- d %>%
                dam5p >= 0.1 ~ "dam5p_010",
                dam5p >= 0.05 ~ "dam5p_005",
                TRUE ~ "dam5p_low"
-           ))
+           ),
+           ani1 = case_when(
+               ani >= 0.95 ~ ani,
+               TRUE ~ NaN
+           )
+           ) 
 
 w <- d3$contigId %>%
     unique() %>%
@@ -77,12 +83,20 @@ idxC <- c("black", "grey", "white")
 names(idxC) <- c("dam5p_010", "dam5p_005", "dam5p_low")
 
 d31 <- d3 %>%
-    filter(aniRank100 < 2)
+    filter(krakenKmerRank < 3,
+           !is.na(aniRank100))
+
+d32 <- d3 %>%
+    distinct(contigId, contigL) %>%
+    arrange(desc(contigL))
+
+d3 <- d3 %>%
+    mutate(contigId = factor(contigId, levels = unique(d32$contigId)))
 
 pdf(paste("plots/", prefix, ".targets_priority.matrix.pdf", sep = ""), width = w, height = h)
 p <- ggplot(d3, aes(x = contigId,
                     y = sampleId,
-                    fill = ani,
+                    fill = ani1,
                     colour = damClass,
                     size = coverageP))
 p +
@@ -103,6 +117,7 @@ p +
           axis.text.y = element_text(size = 6),
           panel.spacing = unit(0.2, "lines"),
           aspect.ratio = 1)
+
 p +
     geom_point(shape = 22) +
     geom_point(shape = 4, color = "black", stroke = 0.25, data = d31) +
@@ -133,24 +148,25 @@ xBreaks <- c(1e-4, 1e-3, 1e-2, 1e-1, 1)
 pdf(paste("plots/", prefix, ".targets_priority.pdf", sep = ""), width = 9, height = 7)
 for(x in unique(d3$sampleId)) {
     d4 <- d1 %>%
-        filter(sampleId == x, contigId == "genome") %>%
-        mutate(isAniTop = aniRank100 < 2 & !is.na(aniRank100))
+        filter(sampleId == x,
+               contigId == "genome") %>%
+        mutate(isTop = krakenKmerRank < 3 & !is.na(aniRank100) & !is.na(krakenKmerRank) & coveragePRatio >= 0.5)
 
     d41 <- d4 %>%
-        filter(isAniTop)
+        filter(isTop)
 
     d42 <- d41 %>%
-        filter(flag == "damage_0.1;aniRank100_1;coveragePRatio_0.9;krakenKmerRank_1")
+        filter(flag == "damage_0.1;aniRank100_1;coveragePRatio_0.8;krakenKmerRank_1")
 
     p <- ggplot(d4, aes(x = coverageP, y = dam5p))
     print(p +
           geom_hline(yintercept = c(0.05, 0.1), size = 0.25, color = c("grey", "black"), linetype = "dashed") +
-          geom_point(aes(fill = ani, size = nReads, alpha = isAniTop), colour = "black", stroke = 0.25, shape = 21) +
+          geom_point(aes(fill = ani, size = nReads, alpha = isTop), colour = "black", stroke = 0.25, shape = 21) +
           geom_point(aes(size = nReads), colour = "black", stroke = 0.25, shape = 4, data = d42) +
-          geom_text_repel(aes(label = taxNameSpecies), size = 1.5, segment.size = 0.25, data = d41) +
+          geom_text_repel(aes(label = taxNameSpecies), size = 1.5, segment.size = 0.25, data = d41, max.overlaps = Inf) +
           scale_fill_viridis(name = "ANI", option = "C") +
           scale_size_continuous("Number of reads", range = c(1, 5)) +
-          scale_alpha_manual("ANI rank 1", values = c(0.1, 1)) +
+          scale_alpha_manual("Kraken kmer rank < 3\n coverageP ratio > 0.5", values = c(0.1, 1)) +
           scale_x_continuous(breaks = xBreaks, trans = "log10", labels = trans_format("log10", math_format(10^.x))) +
           annotation_logticks(sides = "b") +
           coord_cartesian(xlim = c(1e-4, 1), ylim = c(0, 0.5)) +
