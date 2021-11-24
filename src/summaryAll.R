@@ -139,7 +139,6 @@ p +
 dev.off()
 
 
-
 ## --------------------------------------------------------------------------------
 ## plot individual samples coverage vs damage
 
@@ -150,23 +149,27 @@ for(x in unique(d3$sampleId)) {
     d4 <- d1 %>%
         filter(sampleId == x,
                contigId == "genome") %>%
-        mutate(isTop = krakenKmerRank < 3 & !is.na(aniRank100) & !is.na(krakenKmerRank) & coveragePRatio >= 0.5)
+        mutate(isTop = krakenKmerRank < 3 & !is.na(aniRank100) & !is.na(krakenKmerRank) & coveragePRatioCorr >= 0.5,
+               ani1 = case_when(
+               ani >= 0.95 ~ ani,
+               TRUE ~ NaN)
+               )
 
     d41 <- d4 %>%
         filter(isTop)
 
     d42 <- d41 %>%
-        filter(flag == "damage_0.1;aniRank100_1;coveragePRatio_0.8;krakenKmerRank_1")
+        filter(flag == "damage_0.1;aniRank100_1;coveragePRatioCorr_0.8;krakenKmerRank_1")
 
     p <- ggplot(d4, aes(x = coverageP, y = dam5p))
     print(p +
           geom_hline(yintercept = c(0.05, 0.1), size = 0.25, color = c("grey", "black"), linetype = "dashed") +
-          geom_point(aes(fill = ani, size = nReads, alpha = isTop), colour = "black", stroke = 0.25, shape = 21) +
+          geom_point(aes(fill = ani1, size = nReads, alpha = isTop), colour = "black", stroke = 0.25, shape = 21) +
           geom_point(aes(size = nReads), colour = "black", stroke = 0.25, shape = 4, data = d42) +
           geom_text_repel(aes(label = taxNameSpecies), size = 1.5, segment.size = 0.25, data = d41, max.overlaps = Inf) +
           scale_fill_viridis(name = "ANI", option = "C") +
           scale_size_continuous("Number of reads", range = c(1, 5)) +
-          scale_alpha_manual("Kraken kmer rank < 3\n coverageP ratio > 0.5", values = c(0.1, 1)) +
+          scale_alpha_manual("Kraken kmer rank < 3\ncoverageP ratio > 0.5", values = c(0.2, 1)) +
           scale_x_continuous(breaks = xBreaks, trans = "log10", labels = trans_format("log10", math_format(10^.x))) +
           annotation_logticks(sides = "b") +
           coord_cartesian(xlim = c(1e-4, 1), ylim = c(0, 0.5)) +

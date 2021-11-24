@@ -70,7 +70,7 @@ dGc <- foreach(ff = f1) %dopar% {
             group_by(contigId) %>%
             summarise(contigL = l[1],
                       coverageAvg = sum(dp * count) / contigL,
-                      coverageSd = sqrt(sum((dp - coverageAvg)^2*count)/sum(count)),
+                      coverageSd = sqrt(sum((dp - coverageAvg)^2*count) / sum(count)),
                       coverageBp = sum(count[dp>0]), coverageP = 1 - p[1],
                       coveragePExp = 1 - exp(-coverageAvg),
                       coveragePRatio = coverageP / coveragePExp,
@@ -82,7 +82,7 @@ dGc <- foreach(ff = f1) %dopar% {
             summarise(contigId = "genome",
                       contigL = l[1],
                       coverageAvg = sum(dp * count) / contigL,
-                      coverageSd = sqrt(sum((dp - coverageAvg)^2*count)/sum(count)),
+                      coverageSd = sqrt(sum((dp - coverageAvg)^2*count) / sum(count)),
                       coverageBp = sum(count[dp>0]), coverageP = 1 - p[1],
                       coveragePExp = 1 - exp(-coverageAvg),
                       coveragePRatio = coverageP / coveragePExp,
@@ -102,9 +102,17 @@ dGc <- foreach(ff = f1) %dopar% {
         idx <- match(prefix1, r3) ## index of field where prefix starts
         r2 <- r2 %>%
             mutate(genusId = r3[1],
-                   assemblyId = paste(r3[2:(idx - 1)], collapse = "."))
+                   assemblyId = paste(r3[2:(idx - 1)], collapse = "."),
+                   coveragePRatioCorr = NaN)
 
-        select(r2, genusId, assemblyId, contigId, contigL, coverageAvg:pContigsCovered)
+        
+        ## add coveragePRatio corrected for non-masked sites
+        idx <- which(r2$contigId == "genome")
+        s1 <- seqInfo %>%
+            filter(assemblyId == r2$assemblyId[1])
+        
+        r2$coveragePRatioCorr[idx] <- r2$coverageP[idx] / (r2$coveragePExp[idx] * s1$seqLMasked / s1$seqLTot) 
+        select(r2, genusId, assemblyId, contigId, contigL, coverageAvg:coveragePRatio, coveragePRatioCorr, coverageCv:pContigsCovered)
     }
 }
 dGc <- bind_rows(dGc)
@@ -317,26 +325,26 @@ res <- left_join(dGc, dBam, by = c("genusId", "assemblyId", "contigId")) %>%
 
 idx <- res$dam5p >= 0.1 & res$dam5pAvgDecay < 0
 idx1 <- res$aniRank100 < 2
-idx2 <- res$coveragePRatio >= 0.8
+idx2 <- res$coveragePRatioCorr >= 0.8
 idx3 <- res$krakenKmerRank < 2 & !is.na(res$krakenKmerRank)
 
 res$flag[idx] <- "damage_0.1"
 res$flag[idx1] <- "aniRank100_1"
-res$flag[idx2] <- "coveragePRatio_0.8"
+res$flag[idx2] <- "coveragePRatioCorr_0.8"
 res$flag[idx3] <- "krakenKmerRank_1"
 
 res$flag[idx & idx1] <- "damage_0.1;aniRank100_1"
-res$flag[idx & idx2] <- "damage_0.1;coveragePRatio_0.8"
+res$flag[idx & idx2] <- "damage_0.1;coveragePRatioCorr_0.8"
 res$flag[idx & idx3] <- "damage_0.1;krakenKmerRank_1"
-res$flag[idx1 & idx2] <- "aniRank100_1;coveragePRatio_0.8"
+res$flag[idx1 & idx2] <- "aniRank100_1;coveragePRatioCorr_0.8"
 res$flag[idx1 & idx3] <- "aniRank100_1;krakenKmerRank_1"
 res$flag[idx2 & idx3] <- "coveragePRatio_0.8;krakenKmerRank_1"
 
-res$flag[idx & idx1 & idx2] <- "damage_0.1;aniRank100_1;coveragePRatio_0.8"
+res$flag[idx & idx1 & idx2] <- "damage_0.1;aniRank100_1;coveragePRatioCorr_0.8"
 res$flag[idx & idx1 & idx3] <- "damage_0.1;aniRank100_1;krakenKmerRank_1"
-res$flag[idx & idx2 & idx3] <- "damage_0.1;coveragePRatio_0.8;krakenKmerRank_1"
-res$flag[idx1 & idx2 & idx3] <- "aniRank100_1;coveragePRatio_0.8;krakenKmerRank_1"
+res$flag[idx & idx2 & idx3] <- "damage_0.1;coveragePRatioCorr_0.8;krakenKmerRank_1"
+res$flag[idx1 & idx2 & idx3] <- "aniRank100_1;coveragePRatioCorr_0.8;krakenKmerRank_1"
 
-res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.1;aniRank100_1;coveragePRatio_0.8;krakenKmerRank_1"
+res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.1;aniRank100_1;coveragePRatioCorr_0.8;krakenKmerRank_1"
 
 write_tsv(res, path = paste("tables/", sampleId, "/", prefix, ".summary.tsv.gz", sep = ""), na = "NaN")
