@@ -22,10 +22,9 @@ SAMPLES = unit_df.index.unique()
 
 rule all:
     input:
-        "plots/" + PREFIX + ".targets_priority.matrix.pdf",
-        "plots/" + PREFIX + ".targets_priority.pdf",
         "tables/" + PREFIX + ".summary.tsv.gz",
-        "tables/" + PREFIX + ".targets_priority.summary.tsv.gz"
+        "tables/" + PREFIX + ".targets_priority.summary.tsv.gz",
+        "plots/targets_priority/" + PREFIX + ".targets_priority.pdf",
 
           
 ## --------------------------------------------------------------------------------
@@ -36,8 +35,7 @@ rule summary_all:
         tsv=expand("tables/{sample}/" + PREFIX + ".summary.tsv.gz", sample = SAMPLES),
         stamp=expand("stages/{sample}.summary.done", sample = SAMPLES),
     output:
-        "plots/" + PREFIX + ".targets_priority.matrix.pdf",
-        "plots/" + PREFIX + ".targets_priority.pdf",
+        "plots/targets_priority/" + PREFIX + ".targets_priority.pdf",
         "tables/" + PREFIX + ".summary.tsv.gz",
         "tables/" + PREFIX + ".targets_priority.summary.tsv.gz"
     shell:

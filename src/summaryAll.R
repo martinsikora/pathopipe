@@ -37,13 +37,10 @@ d <- foreach(f = files) %do% {
     r
 }
 d <- bind_rows(d)
-write_tsv(d, file = paste("tables/", prefix, ".summary.tsv.gz", sep = ""))
 
 tP <- read_tsv(targetsPriority, col_names = FALSE)
-
 d1 <- d %>%
     filter(genusId %in% tP$X1)
-write_tsv(d1, file = paste("tables/", prefix, ".targets_priority.summary.tsv.gz", sep = ""))
 
 
 ## --------------------------------------------------------------------------------
@@ -71,72 +68,77 @@ d3 <- d %>%
            )
            ) 
 
-w <- d3$contigId %>%
-    unique() %>%
-    length() %/% 8 + 2
-
-h <- d3$sampleId %>%
-    unique() %>%
-    length() %/% 2 + 6
-
-idxC <- c("black", "grey", "white")
-names(idxC) <- c("dam5p_010", "dam5p_005", "dam5p_low")
-
-d31 <- d3 %>%
-    filter(krakenKmerRank < 3,
-           !is.na(aniRank100))
-
 d32 <- d3 %>%
     distinct(contigId, contigL) %>%
     arrange(desc(contigL))
 
 d3 <- d3 %>%
-    mutate(contigId = factor(contigId, levels = unique(d32$contigId)))
+    mutate(contigId = factor(contigId, levels = unique(d32$contigId)),
+           sampleId = factor(sampleId, levels = unique(d3$sampleId)),
+           y = as.integer(sampleId))
 
-pdf(paste("plots/", prefix, ".targets_priority.matrix.pdf", sep = ""), width = w, height = h)
-p <- ggplot(d3, aes(x = contigId,
-                    y = sampleId,
-                    fill = ani1,
-                    colour = damClass,
-                    size = coverageP))
-p +
-    geom_point(shape = 22) +
-    geom_point(shape = 4, color = "black", stroke = 0.25, data = d31) +
-    scale_fill_viridis(name = "ANI", option = "C") +
-    scale_colour_manual(name = "Damage", values = idxC) +
-    scale_size_continuous("Genome coverage", range = c(0.2, 3)) +
-    xlab("Contig") +
-    ylab("Sample") +
-    facet_nested(. ~ genusId + taxNameSpecies + assemblyId, scales = "free_x", space = "free", nest_line = TRUE) +
-    theme_bw() +
-    theme(panel.grid.major = element_line(linetype = "dotted", size = 0.25),
-          panel.grid.minor = element_blank(),
-          strip.background = element_blank(),
-          strip.text.x = element_text(angle = 90, hjust = 0, vjust = 0.5, size = 6),
-          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 6),
-          axis.text.y = element_text(size = 6),
-          panel.spacing = unit(0.2, "lines"),
-          aspect.ratio = 1)
+h <- d3$sampleId %>%
+    unique() %>%
+    length() %/% 2 + 6
 
-p +
-    geom_point(shape = 22) +
-    geom_point(shape = 4, color = "black", stroke = 0.25, data = d31) +
-    scale_fill_viridis(name = "ANI", option = "C") +
-    scale_colour_manual(name = "Damage", values = idxC) +
-    scale_size_continuous("Genome coverage", range = c(0.2, 3), trans = "log10") +
-    xlab("Contig") +
-    ylab("Sample") +
-    facet_nested(. ~ genusId + taxNameSpecies + assemblyId, scales = "free_x", space = "free", nest_line = TRUE) +
-    theme_bw() +
-    theme(panel.grid.major = element_line(linetype = "dotted", size = 0.25),
-          panel.grid.minor = element_blank(),
-          strip.background = element_blank(),
-          strip.text.x = element_text(angle = 90, hjust = 0, vjust = 0.5, size = 6),
-          axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 6),
-          axis.text.y = element_text(size = 6),
-          panel.spacing = unit(0.2, "lines"),
-          aspect.ratio = 1)
-dev.off()
+th <- theme(panel.grid.major = element_line(linetype = "dotted", size = 0.25),
+            panel.grid.minor = element_blank(),
+            strip.background = element_blank(),
+            strip.text.x = element_text(angle = 90, hjust = 0, vjust = 0.5, size = 6),
+            axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 6),
+            axis.text.y = element_text(size = 6),
+            panel.spacing = unit(0.2, "lines"),
+            aspect.ratio = 1)
+
+idxC <- c("black", "grey", "white")
+names(idxC) <- c("dam5p_010", "dam5p_005", "dam5p_low")
+
+yLab <- levels(d3$sampleId)
+yBreaks <- 1:length(yLab)
+
+for(g in unique(d3$genusId)){
+
+    d4 <- filter(d3, genusId == g)
+    d41 <- d4 %>%
+        filter(krakenKmerRank < 3,
+               !is.na(aniRank100))
+
+    w <- d4$contigId %>%
+        unique() %>%
+        length() %/% 8 + 4
+    
+    
+    pdf(paste("plots/targets_priority/", g, ".", prefix, ".targets_priority.matrix.pdf", sep = ""), width = w, height = h)
+    p <- ggplot(d4, aes(x = contigId,
+                        y = y,
+                        fill = ani1,
+                        colour = damClass,
+                        size = coverageP))
+    print(p +
+        geom_point(shape = 22) +
+        geom_point(shape = 4, color = "black", stroke = 0.25, data = d41) +
+        scale_fill_viridis(name = "ANI", option = "C") +
+        scale_colour_manual(name = "Damage", values = idxC) +
+        scale_size_continuous("Genome coverage", range = c(0.2, 3)) +
+        scale_y_continuous(name = "Sample", breaks = yBreaks, labels = yLab, sec.axis = dup_axis()) +
+        xlab("Contig") +
+        facet_nested(. ~ genusId + taxNameSpecies + assemblyId, scales = "free_x", space = "free", nest_line = TRUE) +
+        theme_bw() +
+        th)
+
+    print(p +
+        geom_point(shape = 22) +
+        geom_point(shape = 4, color = "black", stroke = 0.25, data = d41) +
+        scale_fill_viridis(name = "ANI", option = "C") +
+        scale_colour_manual(name = "Damage", values = idxC) +
+        scale_size_continuous("Genome coverage", range = c(0.2, 3), trans = "log10") +
+        scale_y_continuous(name = "Sample", breaks = yBreaks, labels = yLab, sec.axis = dup_axis()) +
+        xlab("Contig") +
+        facet_nested(. ~ genusId + taxNameSpecies + assemblyId, scales = "free_x", space = "free", nest_line = TRUE) +
+        theme_bw() +
+        th)
+    dev.off()
+}
 
 
 ## --------------------------------------------------------------------------------
@@ -144,7 +146,7 @@ dev.off()
 
 xBreaks <- c(1e-4, 1e-3, 1e-2, 1e-1, 1)
 
-pdf(paste("plots/", prefix, ".targets_priority.pdf", sep = ""), width = 9, height = 7)
+pdf(paste("plots/targets_priority/", prefix, ".targets_priority.pdf", sep = ""), width = 9, height = 7)
 for(x in unique(d3$sampleId)) {
     d4 <- d1 %>%
         filter(sampleId == x,
@@ -183,3 +185,10 @@ for(x in unique(d3$sampleId)) {
           )
 }
 dev.off()
+
+
+## --------------------------------------------------------------------------------
+## write summary tables
+
+write_tsv(d, file = paste("tables/", prefix, ".summary.tsv.gz", sep = ""))
+write_tsv(d1, file = paste("tables/", prefix, ".targets_priority.summary.tsv.gz", sep = ""))
