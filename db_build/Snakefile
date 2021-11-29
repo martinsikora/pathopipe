@@ -1,15 +1,18 @@
 
 import pandas as pd
 import glob
+import os
 
 
 ## --------------------------------------------------------------------------------
 ## helpers
 
 unit_df = pd.read_table("refs.tsv", comment="#").set_index(
-    ["prefix"], drop=False
+    ["assemblyId"], drop=False
 )
 REFS = unit_df.index.unique()
+
+KMER_LEN = 29 ## kmer-length for DB
 
 
 ## --------------------------------------------------------------------------------
@@ -19,9 +22,16 @@ def get_fasta(wildcards):
     return unit_df.loc[(wildcards.ref), "fasta"]
 
 
+def get_mask_bed(wildcards):
+    f = unit_df.loc[(wildcards.ref), "fasta"]
+    return os.path.dirname(f) + "/{wildcards.ref}.sdust.bed"
+
+
+
 ## --------------------------------------------------------------------------------
 ## file sets
 
+taxonomy_all = ["taxonomy/names.dmp", "taxonomy/nodes.dmp"]
 mmi_all = expand("minimap2/{ref}.mmi", ref=REFS)
 tables_all = ["taxLists/genus.taxIds.tsv.gz", "taxLists/species.taxIds.tsv.gz", "library.seqInfo.tsv"]
 
@@ -31,20 +41,58 @@ tables_all = ["taxLists/genus.taxIds.tsv.gz", "taxLists/species.taxIds.tsv.gz", 
 
 rule all:
     input:
-        mmi_all + tables_all
-
-
-rule mmi_all:
-    input:
-        mmi_all
+        taxonomy_all + mmi_all + tables_all
 
         
 ## --------------------------------------------------------------------------------
 ## rules
 
-rule index_mmi:
+
+rule get_genome_bed:
     input:
         get_fasta
+    output:
+        "library/{ref}.genome.bed"
+    shell:
+        """
+        seqtk comp {input} | awk '{{print $1"\\t0\\t"$2}}' > {output}
+        """
+
+rule get_mask:
+    input:
+        fa=get_fasta,
+        bed="library/{ref}.genome.bed"
+    output:
+        "library/{ref}.sdust.bed"
+    shell:
+        """
+        sdust -t 30 {input} | bedtools intersect -a stdin -b {input.bed}> {output}
+        """
+
+rule mask_fasta:
+    input:
+        fa=get_fasta,
+        bed="library/{ref}.sdust.bed"
+    output:
+        "library/{ref}.masked_sdust.fna"
+    shell:
+        """
+        bedtools maskfasta -fi {input.fa} -bed {input.bed} -fo {output}
+        """
+
+rule tar_fasta:
+    input:
+        unit_df["fasta"]
+    output:
+        "library/fastas_raw.tar.gz"
+    shell:
+        """
+        tar cvzf {output} {input}
+        """
+
+rule index_mmi:
+    input:
+        "library/{ref}.masked_sdust.fna"
     output:
         "minimap2/{ref}.mmi"
     log:
@@ -56,6 +104,34 @@ rule index_mmi:
         ## kmer and minimizer window size adapted from default sr preset for better sensitivity for very short reads
 
         
+rule download_taxonomy:
+    output:
+        "taxonomy/names.dmp",
+        "taxonomy/nodes.dmp"
+    shell:
+        """
+        krakenuniq-download --db `pwd` taxonomy
+        """
+
+
+rule build_db:
+    input:
+        expand("library/{ref}.masked_sdust.fna", ref=REFS),
+        "taxonomy/names.dmp",
+        "taxonomy/nodes.dmp"
+    output:
+        "taxDB",
+        "database.kdb",
+        "database.idx"
+    log:
+        "logs/krakenuniq_db_build.log"
+    threads:
+        24
+    shell:
+        """
+        (krakenuniq-build --db `pwd` --taxids-for-genomes --taxids-for-sequences -kmer-len {KMER_LEN} --threads {threads}) 2> {log}
+        """
+        
 rule get_taxinfo:
     input:
         "taxDB"
@@ -66,7 +142,7 @@ rule get_taxinfo:
         24
     shell:
         """
-        Rscript getTaxInfo.R {threads}
+        Rscript src/getTaxInfo.R {threads}
         """
 
         
@@ -80,5 +156,5 @@ rule get_libinfo:
         24
     shell:
         """
-        Rscript getLibInfo.R {threads}
+        Rscript src/getLibInfo.R {threads}
         """
