@@ -71,7 +71,8 @@ dGc <- foreach(ff = f1) %dopar% {
             summarise(contigL = l[1],
                       coverageAvg = sum(dp * count) / contigL,
                       coverageSd = sqrt(sum((dp - coverageAvg)^2*count) / sum(count)),
-                      coverageBp = sum(count[dp>0]), coverageP = 1 - p[1],
+                      coverageBp = sum(count[dp>0]),
+                      coverageP = 1 - p[1],
                       coveragePExp = 1 - exp(-coverageAvg),
                       coveragePRatio = coverageP / coveragePExp,
                       coverageCv = coverageSd / coverageAvg,
@@ -83,7 +84,8 @@ dGc <- foreach(ff = f1) %dopar% {
                       contigL = l[1],
                       coverageAvg = sum(dp * count) / contigL,
                       coverageSd = sqrt(sum((dp - coverageAvg)^2*count) / sum(count)),
-                      coverageBp = sum(count[dp>0]), coverageP = 1 - p[1],
+                      coverageBp = sum(count[dp>0]),
+                      coverageP = 1 - p[1],
                       coveragePExp = 1 - exp(-coverageAvg),
                       coveragePRatio = coverageP / coveragePExp,
                       coverageCv = coverageSd / coverageAvg,
@@ -105,13 +107,13 @@ dGc <- foreach(ff = f1) %dopar% {
                    assemblyId = paste(r3[2:(idx - 1)], collapse = "."),
                    coveragePRatioCorr = NaN)
 
-        
+
         ## add coveragePRatio corrected for non-masked sites
         idx <- which(r2$contigId == "genome")
         s1 <- seqInfo %>%
             filter(assemblyId == r2$assemblyId[1])
-        
-        r2$coveragePRatioCorr[idx] <- r2$coverageP[idx] / (r2$coveragePExp[idx] * s1$seqLMasked / s1$seqLTot) 
+
+        r2$coveragePRatioCorr[idx] <- r2$coverageP[idx] / (r2$coveragePExp[idx] * s1$seqLMasked / s1$seqLTot)
         select(r2, genusId, assemblyId, contigId, contigL, coverageAvg:coveragePRatio, coveragePRatioCorr, coverageCv:pContigsCovered)
     }
 }
@@ -148,8 +150,6 @@ dBam <- foreach(ff = f1) %dopar% {
             mutate(nSoftClip = r21)
 
         ## generate final summary tibble
-        r3 <- gsub(".*\\/", "", f1)
-
         r41 <- r2 %>%
             group_by(rname) %>%
             count(nm) %>%
