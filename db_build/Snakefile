@@ -80,15 +80,30 @@ rule mask_fasta:
         bedtools maskfasta -fi {input.fa} -bed {input.bed} -fo {output}
         """
 
+        
 rule tar_fasta:
     input:
-        unit_df["fasta"]
+        expand("library/{ref}.masked_sdust.fna", ref=REFS),
+        fa=unit_df["fasta"]
     output:
         "library/fastas_raw.tar.gz"
     shell:
         """
-        tar cvzf {output} {input}
+        tar cvzf {output} {input.fa}
         """
+
+        
+rule rm_fasta:
+    input:
+        "library/fastas_raw.tar.gz",
+        fa=unit_df["fasta"]
+    output:
+        "library/sdust.done"
+    shell:
+        """
+        rm {input.fa}
+        """
+        
 
 rule index_mmi:
     input:
@@ -118,7 +133,8 @@ rule build_db:
     input:
         expand("library/{ref}.masked_sdust.fna", ref=REFS),
         "taxonomy/names.dmp",
-        "taxonomy/nodes.dmp"
+        "taxonomy/nodes.dmp",
+        "library/sdust.done"
     output:
         "taxDB",
         "database.kdb",
