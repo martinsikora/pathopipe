@@ -102,6 +102,7 @@ rule rm_fasta:
     shell:
         """
         rm {input.fa}
+        touch {output}
         """
         
 
