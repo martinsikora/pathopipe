@@ -1,7 +1,7 @@
 
-############################
-## plot coverage evenness ##
-############################
+##########################
+## plot damage patterns ##
+##########################
 
 
 ## --------------------------------------------------------------------------------
@@ -29,7 +29,7 @@ infiles <- args[-1:-3]
 ## --------------------------------------------------------------------------------
 ## taxInfo
 
-seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "cccccccc")
+seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "ccccccccdd")
 
 ## helper, extract first field of prefix for matching in file name assemblyId parsing
 prefix1 <- strsplit(prefix, "\\.") %>%

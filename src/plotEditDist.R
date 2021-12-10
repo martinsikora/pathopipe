@@ -29,7 +29,7 @@ bamfiles <- args[-1:-4]
 ## --------------------------------------------------------------------------------
 ## taxInfo
 
-seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "cccccccc")
+seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "ccccccccdd")
 
 ## helper, extract first field of prefix for matching in file name assemblyId parsing
 prefix1 <- strsplit(prefix, "\\.") %>%

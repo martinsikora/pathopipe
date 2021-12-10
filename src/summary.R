@@ -36,7 +36,7 @@ registerDoParallel(threads)
 prefix1 <- strsplit(prefix, "\\.") %>%
     map_chr(1)
 
-seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "cccccccc")
+seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "ccccccccdd")
 
 
 ## --------------------------------------------------------------------------------
