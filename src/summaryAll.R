@@ -79,7 +79,7 @@ d3 <- d3 %>%
 
 h <- d3$sampleId %>%
     unique() %>%
-    length() %/% 2 + 6
+    length() %/% 2 + 4
 
 th <- theme(panel.grid.major = element_line(linetype = "dotted", size = 0.25),
             panel.grid.minor = element_blank(),
@@ -105,7 +105,7 @@ for(g in unique(d3$genusId)){
 
     w <- d4$contigId %>%
         unique() %>%
-        length() %/% 8 + 4
+        length() %/% 4 + 4
     
     
     pdf(paste("plots/targets_priority/", g, ".", prefix, ".targets_priority.matrix.pdf", sep = ""), width = w, height = h)
@@ -145,7 +145,7 @@ for(g in unique(d3$genusId)){
 ## plot individual samples coverage vs damage
 
 xBreaks <- c(1e-4, 1e-3, 1e-2, 1e-1, 1)
-
+ 
 pdf(paste("plots/targets_priority/", prefix, ".targets_priority.pdf", sep = ""), width = 9, height = 7)
 for(x in unique(d3$sampleId)) {
     d4 <- d1 %>%
