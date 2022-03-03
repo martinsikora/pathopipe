@@ -33,7 +33,7 @@ files <- args[-1:-2]
 ## process tables and summarise
 
 d <- foreach(f = files) %do% {
-    r <- read_tsv(f, col_types = "ccccccddddddddddddddddddddddddddddddc", na = c("", "NA", "NaN"))
+    r <- read_tsv(f, col_types = "ccccccdddddddddddddddddddddddddddddddc", na = c("", "NA", "NaN"))
     r
 }
 d <- bind_rows(d)
