@@ -38,7 +38,7 @@ d <- foreach(f = files) %do% {
 }
 d <- bind_rows(d)
 
-tP <- read_tsv(targetsPriority, col_names = FALSE)
+tP <- read_table(targetsPriority, col_names = FALSE, col_types = "cc")
 d1 <- d %>%
     filter(genusId %in% tP$X1)
 
