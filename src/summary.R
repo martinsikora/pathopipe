@@ -25,6 +25,7 @@ prefix <- args[1]
 dbPath <- args[2]
 sampleId <- args[3]
 threads <- as.integer(args[4])
+metaDMG <- args[5]
 
 
 ## --------------------------------------------------------------------------------
@@ -231,12 +232,12 @@ dBam <- dBam %>%
 
 hdr <- c("contigId", "nReads", "end", "pos", "AA", "AC", "AG", "AT", "CA", "CC", "CG", "CT", "GA", "GC", "GG", "GT", "TA", "TC", "TG", "TT")
 
-f1 <- list.files(path = paste("metadamage/", sampleId, sep = ""), pattern = "bdamage.gz$", full.names = TRUE)
+f1 <- list.files(path = paste("metadamage/", sampleId, sep = ""), pattern = "local.bdamage.gz$", full.names = TRUE)
 ct <- c("CC", "CA", "CG", "CT")
 ga <- c("GG", "GC", "GT", "GA")
 dDamage <- foreach(ff = f1) %dopar% {
 
-    bam <- gsub(".bdamage.gz", ".bam", ff) %>%
+    bam <- gsub(".local.bdamage.gz", ".bam", ff) %>%
         gsub("metadamage", "bam", .)
 
     s1 <- gsub("metadamage/", "", ff) %>%
@@ -245,44 +246,50 @@ dDamage <- foreach(ff = f1) %dopar% {
         strsplit("\\.") %>%
         unlist()
 
-    p <- pipe(paste("metadamage print -countout -howmany 25 -bam ", bam, " ", ff))
-    r <- read_tsv(p, col_names = hdr, col_types = "cdcidddddddddddddddd", skip = 1)
+    ## local DMG
+    p <- pipe(paste(metaDMG, " print -howmany 25 -bam ", bam, " ", ff, sep = ""))
+    rL <- read_tsv(p, col_names = hdr, col_types = "cdcidddddddddddddddd", skip = 1)
 
-    if(nrow(r) == 0){
+    ## global DMG
+    p <- pipe(paste(metaDMG, " print -howmany 25 ", gsub("local", "global", ff), sep = ""))
+    rG <- read_tsv(p, col_names = hdr, col_types = "cdcidddddddddddddddd", skip = 1)
+    
+    if(nrow(rG) == 0){
         NULL
     }
     else {
-        r1 <- r %>%
+
+        ## local
+        r1 <- rL %>%
             filter(nReads > 0) %>%
             select(contigId, end, pos, all_of(ct), all_of(ga)) %>%
             pivot_longer(c(all_of(ct), all_of(ga))) %>%
-            filter((end == "5'" & name %in% ct) | (end == "3'" & name %in% ga))
+            filter((end == "5'" & name == "CT") | (end == "3'" & name == "GA"))
 
-        r2 <- group_by(r1, contigId, end, pos) %>%
-            summarise(dam = value[name %in% c("CT", "GA")] / sum(value)) %>%
-            mutate(dam = replace_na(dam, 0)) %>%
-            group_by(contigId) %>%
-            summarise(dam5p = dam[end == "5'" & pos == 0],
-                      dam3p = dam[end == "3'" & pos == 0],
-                      dam5pAvgDecay = mean(diff(dam[pos < 5 & end == "5'"])),
-                      dam3pAvgDecay = mean(diff(dam[pos < 5 & end == "3'"]))) %>%
+        r2 <- group_by(r1, contigId) %>%
+            summarise(dam5p = value[end == "5'" & pos == 0],
+                      dam3p = value[end == "3'" & pos == 0],
+                      dam5pAvgDecay = mean(diff(value[pos < 5 & end == "5'"])),
+                      dam3pAvgDecay = mean(diff(value[pos < 5 & end == "3'"]))) %>%
             ungroup()
 
-        r21 <- group_by(r1, end, pos) %>%
-            summarise(dam = sum(value[name %in% c("CT", "GA")]) / sum(value)) %>%
-            mutate(dam = replace_na(dam, 0)) %>%
-            ungroup() %>%
-            summarise(dam5p = dam[end == "5'" & pos == 0],
-                      dam3p = dam[end == "3'" & pos == 0],
-                      dam5pAvgDecay = mean(diff(dam[pos < 5 & end == "5'"])),
-                      dam3pAvgDecay = mean(diff(dam[pos < 5 & end == "3'"]))) %>%
-            mutate(contigId = "genome")
-
+        ## global
+        r3 <- rG %>%
+            filter(nReads > 0) %>%
+            select(contigId, end, pos, all_of(ct), all_of(ga)) %>%
+            pivot_longer(c(all_of(ct), all_of(ga))) %>%
+            filter((end == "5'" & name == "CT") | (end == "3'" & name == "GA")) %>%
+            summarise(dam5p = value[end == "5'" & pos == 0],
+                      dam3p = value[end == "3'" & pos == 0],
+                      dam5pAvgDecay = mean(diff(value[pos < 5 & end == "5'"])),
+                      dam3pAvgDecay = mean(diff(value[pos < 5 & end == "3'"]))) %>%
+            mutate(contigId = "genome") 
+        
         idx <- match(prefix1, s1) ## index of field where prefix starts
-        r2 <- bind_rows(r2, r21) %>%
+        r4 <- bind_rows(r2, r3) %>%
             mutate(genusId = s1[1],
                    assemblyId = paste(s1[2:(idx - 1)], collapse = "."))
-        select(r2, genusId, assemblyId, contigId, dam5p:dam3pAvgDecay)
+        select(r4, genusId, assemblyId, contigId, dam5p:dam3pAvgDecay)
     }
 }
 dDamage <- bind_rows(dDamage)

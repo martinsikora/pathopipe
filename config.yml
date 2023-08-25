@@ -5,16 +5,17 @@ units:
 genera:
   targets.tsv
 db:
-  /science/willerslev/scratch/krakenuniq-db/hum_microbe
+  /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe
 kmers:
   50
 MQ:
   20
 tmp_dir:
   /dev/shm/pathopipe
-picard:
-  /willerslev/software/picard/picard.jar
 mm2_param:
   "-x sr"
 targets_priority:
   targets_priority.tsv
+metaDMG-cpp:
+  /home/dsw670/progs/metaDMG-cpp/metaDMG-cpp
+  

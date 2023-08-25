@@ -23,7 +23,8 @@ args <- commandArgs(trailingOnly = TRUE)
 prefix <- args[1]
 dbPath <- args[2]
 outPdf <- args[3]
-infiles <- args[-1:-3]
+metaDMG <- args[4]
+infiles <- args[-1:-4]
 
 
 ## --------------------------------------------------------------------------------
@@ -32,7 +33,8 @@ infiles <- args[-1:-3]
 seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""), col_types = "ccccccccdd")
 
 ## helper, extract first field of prefix for matching in file name assemblyId parsing
-prefix1 <- strsplit(prefix, "\\.") %>%
+prefix1 <- prefix %>%
+    strsplit("\\.") %>%
     map_chr(1)
 
 
@@ -41,11 +43,11 @@ prefix1 <- strsplit(prefix, "\\.") %>%
 
 hdr <- c("contigId", "nReads", "end", "pos", "AA", "AC", "AG", "AT", "CA", "CC", "CG", "CT", "GA", "GC", "GG", "GT", "TA", "TC", "TG", "TT")
 
-d <- foreach(f1 = infiles) %do% {
-    bam <- gsub(".bdamage.gz", ".bam", f1) %>%
+d <- map_dfr(infiles, ~{
+    bam <- gsub(".bdamage.gz", ".bam", .x) %>%
         gsub("metadamage", "bam", .)
 
-    s1 <- gsub("metadamage/", "", f1) %>%
+    s1 <- gsub("metadamage/", "", .x) %>%
         strsplit("\\/") %>%
         map_chr(2) %>%
         strsplit("\\.") %>%
@@ -54,19 +56,19 @@ d <- foreach(f1 = infiles) %do% {
     idx <- match(prefix1, s1) ## index of field where prefix starts
     assemblyId <- paste(s1[2:(idx - 1)], collapse = ".")
 
-    p <- pipe(paste("metadamage print -countout -howmany 25 -bam ", bam, " ", f1))
+    p <- pipe(paste(metaDMG, " print -howmany 25 ", .x, sep = ""))
     r <- read_tsv(p, col_names = hdr, col_types = "cdcidddddddddddddddd", skip = 1)
+
     r1 <- r %>%
         pivot_longer(all_of(hdr[-1:-4])) %>%
-        mutate(refAllele = substr(name, 1, 1)) %>%
-        group_by(end, pos, refAllele, name) %>%
-        summarise(value = sum(value)) %>%
-        mutate(p = value / sum(value)) %>%
-        ungroup() %>%
+        mutate(refAllele = substr(name, 1, 1),
+               p = value) %>%
+        select(end, pos, refAllele, name, p) %>%
         mutate(assemblyId = assemblyId,
                taxNameSpecies = seqInfo$taxNameSpecies[match(assemblyId, seqInfo$assemblyId)])
+
     r1
-}
+})
 d <- bind_rows(d)
 d$pos[d$end == "3'"] <- -d$pos[d$end == "3'"]
 
@@ -82,7 +84,7 @@ st <- c("CT", "GA", "AA", "AC", "AG", "AT", "CA", "CC", "CG", "GC", "GG", "GT", 
 idxSt <- c("red", "blue", rep("grey", length(st) - 2))
 names(idxSt) <- st
 
-h <- 2 + length(infiles)
+h <- 2 + length(unique(d$assemblyId))
 
 pdf(outPdf, width = 10, height = h)
 if(nrow(d) == 0){

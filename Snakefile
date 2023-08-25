@@ -11,8 +11,8 @@ GENFILE = config["genera"]  ## target genera file
 KMERS = config["kmers"]  ## minimum kmers for target assemblies
 MQ = config["MQ"]  ## MQ cutoff for mapped BAMs
 TMP_DIR = config["tmp_dir"]  ## path to location for temporary files
-PICARD = config["picard"]  ## path to location for picard tools jar file
 MM2_PARAM = config["mm2_param"]
+METADMG_CPP = config["metaDMG-cpp"]  ## path to metaDMG cpp module
 
 
 ## --------------------------------------------------------------------------------
@@ -61,7 +61,7 @@ rule all:
 rule db_preload:
     output:
         "stages/db.preload.done",
-    threads: 48
+    threads: 64
     benchmark:
         "benchmarks/db.preload.txt"
     shell:
@@ -84,7 +84,7 @@ rule classify:
         "logs/{sample}/classify.log",
     params:
         sample="{sample}",
-    threads: 48
+    threads: 64
     shell:
         """     
         (krakenuniq --db {DB} --threads {threads} --only-classified-output --report-file report/{params.sample}.{PREFIX}.krakenuniq.report.tsv {input.fq} | gzip > {output.classify}) 2> {log}
@@ -238,6 +238,7 @@ rule map_minimap2:
 rule sort_bam:
     input:
         bam=TMP_DIR + "/{sample}/{genus}.{assembly}.init.bam",
+        fa=get_fa,
     output:
         bam=temp(TMP_DIR + "/{sample}/{genus}.{assembly}.srt.bam"),
     wildcard_constraints:
@@ -245,7 +246,7 @@ rule sort_bam:
     threads: 2
     shell:
         """
-        samtools sort -@{threads} {input.bam} > {output.bam}
+        samtools sort -@{threads} {input.bam} | samtools calmd -b - {input.fa} > {output.bam}
         """
 
 
@@ -265,7 +266,7 @@ rule mark_duplicates:
         4
     shell:
         """
-        java -Xmx16g -XX:ParallelGCThreads={threads} -jar {PICARD} MarkDuplicates I={input} O={output.bam} M={output.metrics} 2> {log}
+        picard -Xmx50g MarkDuplicates -I {input} -O {output.bam} -M {output.metrics} --TMP_DIR {TMP_DIR} 2> {log}
         """
 
 
@@ -285,7 +286,6 @@ rule index_bam:
 rule filter_bam:
     input:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".mrkdup.bam",
-        fa=get_fa,
     output:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam",
         bai="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam.bai",
@@ -293,7 +293,7 @@ rule filter_bam:
         genus="\d+",
     shell:
         """
-        samtools view -q{MQ} -F 0x400 -bh {input.bam} | samtools calmd -b - {input.fa} > {output.bam}
+        samtools view -q{MQ} -F 0x400 -bh {input.bam} > {output.bam}
         samtools index {output.bam}
         """
 
@@ -337,26 +337,67 @@ rule map_collect:
         """
 
 
-rule get_damage:
+rule sort_bam_metaDMG:
     input:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam",
         bai="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam.bai",
+    output:
+        bam=TMP_DIR + "/{sample}/{genus}.{assembly}.filter.srt_name.bam",
+    wildcard_constraints:
+        genus="\d+",
+    shell:
+        """
+        samtools sort -n {input.bam} > {output.bam}
+        """
+
+        
+rule get_damage_global:
+    input:
+        bam=TMP_DIR + "/{sample}/{genus}.{assembly}.filter.srt_name.bam",
     output:
         dam=(
             "metadamage/{sample}/{genus}.{assembly}."
             + PREFIX
             + ".filter.damage_global.txt"
         ),
-        bdam="metadamage/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bdamage.gz",
+        bdam="metadamage/{sample}/{genus}.{assembly}." + PREFIX + ".filter.global.bdamage.gz",
     benchmark:
         "benchmarks/{sample}/{genus}.{assembly}.get_damage.txt"
     log:
         "logs/{sample}/{genus}.{assembly}.get_damage.log",
     wildcard_constraints:
         genus="\d+",
+    params:
+        px="metadamage/{sample}/{genus}.{assembly}." + PREFIX + ".filter.global"
+    
     shell:
         """
-        (metadamage getdamage -p 25 -r1 {input.bam} -o metadamage/{wildcards.sample}/{wildcards.genus}.{wildcards.assembly}.{PREFIX}.filter) 2> {log} 1> {output.dam}
+        ({METADMG_CPP} getdamage -p 25 -r 0 {input.bam} -o {params.px}) 2> {log} 1> {output.dam}
+        """
+
+
+rule get_damage_local:
+    input:
+        bam=TMP_DIR + "/{sample}/{genus}.{assembly}.filter.srt_name.bam",
+    output:
+        dam=(
+            "metadamage/{sample}/{genus}.{assembly}."
+            + PREFIX
+            + ".filter.damage_local.txt"
+        ),
+        bdam="metadamage/{sample}/{genus}.{assembly}." + PREFIX + ".filter.local.bdamage.gz",
+    benchmark:
+        "benchmarks/{sample}/{genus}.{assembly}.get_damage.txt"
+    log:
+        "logs/{sample}/{genus}.{assembly}.get_damage.log",
+    wildcard_constraints:
+        genus="\d+",
+    params:
+        px="metadamage/{sample}/{genus}.{assembly}." + PREFIX + ".filter.local"
+    
+    shell:
+        """
+        ({METADMG_CPP} getdamage -p 25 -r 1 {input.bam} -o {params.px}) 2> {log} 1> {output.dam}
         """
 
 
@@ -366,7 +407,7 @@ def aggregate_damage(wildcards):
         "metadamage/{sample}/{unit}." + PREFIX + ".filter.{ext}",
         sample=wildcards.sample,
         unit=glob_wildcards(os.path.join(checkpoint_output, "{unit}.id")).unit,
-        ext=["bdamage.gz", "damage_global.txt"],
+        ext=["global.bdamage.gz", "damage_global.txt", "local.bdamage.gz", "damage_local.txt"],
     )
     return files
 
@@ -391,10 +432,10 @@ rule summary_sample:
         stamp="stages/{sample}.summary.done",
     params:
         sample="{sample}",
-    threads: 12
+    threads: 48
     shell:
         """
-        Rscript src/summary.R {PREFIX} {DB} {params.sample} {threads}
+        Rscript src/summary.R {PREFIX} {DB} {params.sample} {threads} {METADMG_CPP}
         touch {output.stamp}
         """
 
@@ -440,7 +481,7 @@ def aggregate_damage_genus(wildcards):
         sample=wildcards.sample,
         genus=wildcards.genus,
         assembly=f,
-        ext=["bdamage.gz"],
+        ext=["global.bdamage.gz"],
     )
     return files
 
@@ -454,7 +495,7 @@ rule plot_damage:
         genus="\d+",
     shell:
         """
-        Rscript src/plotDamage.R {PREFIX} {DB} {output.pdf} {input}
+        Rscript src/plotDamage.R {PREFIX} {DB} {output.pdf} {METADMG_CPP} {input}
         """
 
 
