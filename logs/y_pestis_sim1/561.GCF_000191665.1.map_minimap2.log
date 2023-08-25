@@ -1,0 +1,9 @@
+[WARNING][1;31m Indexing parameters (-k, -w or -H) overridden by parameters used in the prebuilt index.[0m
+[M::main::0.176*0.93] loaded/built the index for 6 target sequence(s)
+[M::mm_mapopt_update::0.176*0.93] mid_occ = 1000
+[M::mm_idx_stat] kmer size: 15; skip: 5; is_hpc: 0; #seq: 6
+[M::mm_idx_stat::0.202*0.94] distinct minimizers: 1610873 (98.48% are singletons); average occurrences: 1.017; average spacing: 2.972; total length: 4866106
+[M::worker_pipeline::0.203*0.94] mapped 122 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -R @RG\tID:561.y_pestis_sim1\tSM:y_pestis_sim1 -t 4 -x sr -a /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe/minimap2/Escherichia_fergusonii_ECD227-tax981367-GCF_000191665.1_ecmda7_genomic-dustmasked.mmi fq/y_pestis_sim1/561.fq.gz
+[M::main] Real time: 0.243 sec; CPU: 0.203 sec; Peak RSS: 0.054 GB

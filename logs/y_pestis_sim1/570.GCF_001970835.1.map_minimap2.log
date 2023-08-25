@@ -1,0 +1,9 @@
+[WARNING][1;31m Indexing parameters (-k, -w or -H) overridden by parameters used in the prebuilt index.[0m
+[M::main::0.227*0.99] loaded/built the index for 6 target sequence(s)
+[M::mm_mapopt_update::0.227*0.99] mid_occ = 1000
+[M::mm_idx_stat] kmer size: 15; skip: 5; is_hpc: 0; #seq: 6
+[M::mm_idx_stat::0.274*0.99] distinct minimizers: 2038967 (96.16% are singletons); average occurrences: 1.057; average spacing: 2.967; total length: 6394387
+[M::worker_pipeline::0.276*0.99] mapped 20 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -R @RG\tID:570.y_pestis_sim1\tSM:y_pestis_sim1 -t 4 -x sr -a /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe/minimap2/Klebsiella_oxytoca_strain_CAV1752-tax571-GCF_001970835.1_ASM197083v1_genomic-dustmasked.mmi fq/y_pestis_sim1/570.fq.gz
+[M::main] Real time: 0.294 sec; CPU: 0.292 sec; Peak RSS: 0.073 GB

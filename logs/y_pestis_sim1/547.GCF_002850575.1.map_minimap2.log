@@ -1,0 +1,9 @@
+[WARNING][1;31m Indexing parameters (-k, -w or -H) overridden by parameters used in the prebuilt index.[0m
+[M::main::0.281*0.52] loaded/built the index for 1 target sequence(s)
+[M::mm_mapopt_update::0.281*0.52] mid_occ = 1000
+[M::mm_idx_stat] kmer size: 15; skip: 5; is_hpc: 0; #seq: 1
+[M::mm_idx_stat::0.306*0.56] distinct minimizers: 1566608 (97.75% are singletons); average occurrences: 1.033; average spacing: 2.963; total length: 4796512
+[M::worker_pipeline::0.307*0.56] mapped 9 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -R @RG\tID:547.y_pestis_sim1\tSM:y_pestis_sim1 -t 4 -x sr -a /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe/minimap2/Enterobacter_cancerogenus_strain_CR_Eb1-tax69218-GCF_002850575.1_ASM285057v1_genomic-dustmasked.mmi fq/y_pestis_sim1/547.fq.gz
+[M::main] Real time: 0.318 sec; CPU: 0.183 sec; Peak RSS: 0.050 GB

@@ -1,0 +1,10 @@
+629	Yersinia
+613	Serratia
+561	Escherichia
+590	Salmonella
+570	Klebsiella
+544	Citrobacter
+620	Shigella
+547	Enterobacter
+122277	Pectobacterium
+204037	Dickeya

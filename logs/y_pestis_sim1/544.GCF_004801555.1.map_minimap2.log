@@ -1,0 +1,9 @@
+[WARNING][1;31m Indexing parameters (-k, -w or -H) overridden by parameters used in the prebuilt index.[0m
+[M::main::0.287*0.58] loaded/built the index for 4 target sequence(s)
+[M::mm_mapopt_update::0.287*0.58] mid_occ = 1000
+[M::mm_idx_stat] kmer size: 15; skip: 5; is_hpc: 0; #seq: 4
+[M::mm_idx_stat::0.317*0.62] distinct minimizers: 1687138 (97.88% are singletons); average occurrences: 1.043; average spacing: 2.962; total length: 5213846
+[M::worker_pipeline::0.318*0.63] mapped 14 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -R @RG\tID:544.y_pestis_sim1\tSM:y_pestis_sim1 -t 4 -x sr -a /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe/minimap2/Citrobacter_portucalensis_strain_Effluent_1-tax1639133-GCF_004801555.1_ASM480155v1_genomic-dustmasked.mmi fq/y_pestis_sim1/544.fq.gz
+[M::main] Real time: 0.328 sec; CPU: 0.209 sec; Peak RSS: 0.060 GB

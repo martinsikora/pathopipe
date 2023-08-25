@@ -1,0 +1,9 @@
+[WARNING][1;31m Indexing parameters (-k, -w or -H) overridden by parameters used in the prebuilt index.[0m
+[M::main::0.148*0.99] loaded/built the index for 3 target sequence(s)
+[M::mm_mapopt_update::0.148*0.99] mid_occ = 1000
+[M::mm_idx_stat] kmer size: 15; skip: 5; is_hpc: 0; #seq: 3
+[M::mm_idx_stat::0.172*0.99] distinct minimizers: 1547664 (97.51% are singletons); average occurrences: 1.055; average spacing: 2.971; total length: 4850874
+[M::worker_pipeline::0.519*1.73] mapped 85282 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -R @RG\tID:629.y_pestis_sim1\tSM:y_pestis_sim1 -t 4 -x sr -a /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe/minimap2/Yersinia_enterocolitica_LC20-tax1443113-GCF_000597945.1_ASM59794v2_genomic-dustmasked.mmi fq/y_pestis_sim1/629.fq.gz
+[M::main] Real time: 0.562 sec; CPU: 0.913 sec; Peak RSS: 0.072 GB

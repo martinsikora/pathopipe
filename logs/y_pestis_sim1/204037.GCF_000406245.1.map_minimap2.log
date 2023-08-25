@@ -1,0 +1,9 @@
+[WARNING][1;31m Indexing parameters (-k, -w or -H) overridden by parameters used in the prebuilt index.[0m
+[M::main::0.131*0.78] loaded/built the index for 23 target sequence(s)
+[M::mm_mapopt_update::0.131*0.78] mid_occ = 1000
+[M::mm_idx_stat] kmer size: 15; skip: 5; is_hpc: 0; #seq: 23
+[M::mm_idx_stat::0.151*0.81] distinct minimizers: 1542919 (97.64% are singletons); average occurrences: 1.031; average spacing: 2.973; total length: 4730712
+[M::worker_pipeline::0.153*0.81] mapped 10 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -R @RG\tID:204037.y_pestis_sim1\tSM:y_pestis_sim1 -t 4 -x sr -a /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe/minimap2/Dickeya_chrysanthemi_NCPPB_3533-tax1224148-GCF_000406245.1_DCH3533_1.0_genomic-dustmasked.mmi fq/y_pestis_sim1/204037.fq.gz
+[M::main] Real time: 0.175 sec; CPU: 0.132 sec; Peak RSS: 0.051 GB

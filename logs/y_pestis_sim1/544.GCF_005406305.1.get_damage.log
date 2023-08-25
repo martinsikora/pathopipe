@@ -1,0 +1,8 @@
+	-> metaDMG version: 0.2-41-gc867207 (htslib: 1.10) build(Aug 17 2022 16:28:09)
+#/home/dsw670/progs/metaDMG-cpp/metaDMG-cpp getdamage -p 25 -r 1 /dev/shm/pathopipe/y_pestis_sim1/544.GCF_005406305.1.filter.srt_name.bam -o metadamage/y_pestis_sim1/544.GCF_005406305.1.pathopipe.filter.local 
+./metaDMG-cpp refName: (null) minLength: 35 printLength: 25 runmode: 1 outname: metadamage/y_pestis_sim1/544.GCF_005406305.1.pathopipe.filter.local nthreads: 4
+	-> Will dump: 'metadamage/y_pestis_sim1/544.GCF_005406305.1.pathopipe.filter.local.res.gz' this contains damage patterns for: 1 items
+	-> Setting threads to: 4 
+	-> Will dump: 'metadamage/y_pestis_sim1/544.GCF_005406305.1.pathopipe.filter.local.bdamage.gz' this contains damage patterns for: 1 items
+	-> Setting threads to: 4 
+	-> Outputting overall statistic in file: "metadamage/y_pestis_sim1/544.GCF_005406305.1.pathopipe.filter.local.stat"

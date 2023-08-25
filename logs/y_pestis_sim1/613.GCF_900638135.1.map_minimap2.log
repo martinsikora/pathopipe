@@ -1,0 +1,9 @@
+[WARNING][1;31m Indexing parameters (-k, -w or -H) overridden by parameters used in the prebuilt index.[0m
+[M::main::0.309*0.61] loaded/built the index for 1 target sequence(s)
+[M::mm_mapopt_update::0.309*0.61] mid_occ = 1000
+[M::mm_idx_stat] kmer size: 15; skip: 5; is_hpc: 0; #seq: 1
+[M::mm_idx_stat::0.342*0.64] distinct minimizers: 1763022 (97.76% are singletons); average occurrences: 1.030; average spacing: 2.960; total length: 5376744
+[M::worker_pipeline::0.343*0.65] mapped 19 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -R @RG\tID:613.y_pestis_sim1\tSM:y_pestis_sim1 -t 4 -x sr -a /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe/minimap2/Serratia_quinivorans_strain_NCTC13188-tax137545-GCF_900638135.1_56433_G01_genomic-dustmasked.mmi fq/y_pestis_sim1/613.fq.gz
+[M::main] Real time: 0.353 sec; CPU: 0.232 sec; Peak RSS: 0.065 GB

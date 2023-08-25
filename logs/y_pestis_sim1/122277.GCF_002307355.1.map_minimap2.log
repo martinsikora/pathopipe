@@ -1,0 +1,9 @@
+[WARNING][1;31m Indexing parameters (-k, -w or -H) overridden by parameters used in the prebuilt index.[0m
+[M::main::0.438*0.36] loaded/built the index for 1 target sequence(s)
+[M::mm_mapopt_update::0.438*0.36] mid_occ = 1000
+[M::mm_idx_stat] kmer size: 15; skip: 5; is_hpc: 0; #seq: 1
+[M::mm_idx_stat::0.463*0.40] distinct minimizers: 1586795 (98.28% are singletons); average occurrences: 1.026; average spacing: 2.966; total length: 4826824
+[M::worker_pipeline::0.464*0.40] mapped 10 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -R @RG\tID:122277.y_pestis_sim1\tSM:y_pestis_sim1 -t 4 -x sr -a /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe/minimap2/Pectobacterium_polaris_strain_NIBIO1006-tax2042057-GCF_002307355.1_ASM230735v1_genomic-dustmasked.mmi fq/y_pestis_sim1/122277.fq.gz
+[M::main] Real time: 0.474 sec; CPU: 0.194 sec; Peak RSS: 0.052 GB

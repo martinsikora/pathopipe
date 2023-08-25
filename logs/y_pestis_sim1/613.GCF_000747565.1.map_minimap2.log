@@ -1,0 +1,9 @@
+[WARNING][1;31m Indexing parameters (-k, -w or -H) overridden by parameters used in the prebuilt index.[0m
+[M::main::0.258*0.63] loaded/built the index for 2 target sequence(s)
+[M::mm_mapopt_update::0.258*0.63] mid_occ = 1000
+[M::mm_idx_stat] kmer size: 15; skip: 5; is_hpc: 0; #seq: 2
+[M::mm_idx_stat::0.287*0.67] distinct minimizers: 1624557 (95.63% are singletons); average occurrences: 1.058; average spacing: 2.968; total length: 5101896
+[M::worker_pipeline::0.289*0.67] mapped 19 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -R @RG\tID:613.y_pestis_sim1\tSM:y_pestis_sim1 -t 4 -x sr -a /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe/minimap2/Serratia_sp_SCBI-tax488142-GCF_000747565.1_ASM74756v1_genomic-dustmasked.mmi fq/y_pestis_sim1/613.fq.gz
+[M::main] Real time: 0.588 sec; CPU: 0.204 sec; Peak RSS: 0.057 GB

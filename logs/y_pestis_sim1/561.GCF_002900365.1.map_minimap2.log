@@ -1,0 +1,9 @@
+[WARNING][1;31m Indexing parameters (-k, -w or -H) overridden by parameters used in the prebuilt index.[0m
+[M::main::0.145*0.98] loaded/built the index for 3 target sequence(s)
+[M::mm_mapopt_update::0.145*0.98] mid_occ = 1000
+[M::mm_idx_stat] kmer size: 15; skip: 5; is_hpc: 0; #seq: 3
+[M::mm_idx_stat::0.169*0.99] distinct minimizers: 1535850 (97.68% are singletons); average occurrences: 1.075; average spacing: 2.967; total length: 4896291
+[M::worker_pipeline::0.171*0.99] mapped 122 sequences
+[M::main] Version: 2.24-r1122
+[M::main] CMD: minimap2 -R @RG\tID:561.y_pestis_sim1\tSM:y_pestis_sim1 -t 4 -x sr -a /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe/minimap2/Escherichia_marmotae_strain_HT073016-tax1499973-GCF_002900365.1_ASM290036v1_genomic-dustmasked.mmi fq/y_pestis_sim1/561.fq.gz
+[M::main] Real time: 0.184 sec; CPU: 0.182 sec; Peak RSS: 0.049 GB
