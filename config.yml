@@ -6,6 +6,8 @@ genera:
   targets.tsv
 db:
   /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe
+krakenuniq_memory:
+  64G
 kmers:
   50
 MQ:
@@ -18,4 +20,3 @@ targets_priority:
   targets_priority.tsv
 metaDMG-cpp:
   /home/dsw670/progs/metaDMG-cpp/metaDMG-cpp
-  

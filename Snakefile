@@ -9,6 +9,7 @@ PREFIX = config["prefix"]  ## output prefix
 DB = config["db"]  ## database root dir
 GENFILE = config["genera"]  ## target genera file
 KMERS = config["kmers"]  ## minimum kmers for target assemblies
+KRAKENUNIQ_MEMORY = config["krakenuniq_memory"]  ## memory size for KrakenUniq DB preload chunking
 MQ = config["MQ"]  ## MQ cutoff for mapped BAMs
 TMP_DIR = config["tmp_dir"]  ## path to location for temporary files
 MM2_PARAM = config["mm2_param"]
@@ -57,24 +58,9 @@ rule all:
 ## --------------------------------------------------------------------------------
 ## rules
 
-
-rule db_preload:
-    output:
-        "stages/db.preload.done",
-    threads: 64
-    benchmark:
-        "benchmarks/db.preload.txt"
-    shell:
-        """          
-        krakenuniq --db {DB} --preload --threads {threads} 
-        touch {output}
-        """
-
-
 rule classify:
     input:
         fq=get_fq,
-        preload="stages/db.preload.done",
     output:
         classify="classify/{sample}." + PREFIX + ".krakenuniq.class.tsv.gz",
         rep="report/{sample}." + PREFIX + ".krakenuniq.report.tsv.gz",
@@ -87,7 +73,7 @@ rule classify:
     threads: 64
     shell:
         """     
-        (krakenuniq --db {DB} --threads {threads} --only-classified-output --report-file report/{params.sample}.{PREFIX}.krakenuniq.report.tsv {input.fq} | gzip > {output.classify}) 2> {log}
+        (krakenuniq --db {DB} --preload-size {KRAKENUNIQ_MEMORY} --threads {threads} --only-classified-output --report-file report/{params.sample}.{PREFIX}.krakenuniq.report.tsv {input.fq} | gzip > {output.classify}) 2> {log}
         gzip report/{params.sample}.{PREFIX}.krakenuniq.report.tsv
         """
 
