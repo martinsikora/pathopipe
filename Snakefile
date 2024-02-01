@@ -9,10 +9,9 @@ PREFIX = config["prefix"]  ## output prefix
 DB = config["db"]  ## database root dir
 GENFILE = config["genera"]  ## target genera file
 KMERS = config["kmers"]  ## minimum kmers for target assemblies
-KRAKENUNIQ_MEMORY = config["krakenuniq_memory"]  ## memory size for KrakenUniq DB preload chunking
 MQ = config["MQ"]  ## MQ cutoff for mapped BAMs
 TMP_DIR = config["tmp_dir"]  ## path to location for temporary files
-MM2_PARAM = config["mm2_param"]
+BT2_PARAM = config["bt2_param"]
 METADMG_CPP = config["metaDMG-cpp"]  ## path to metaDMG cpp module
 
 
@@ -24,7 +23,7 @@ unit_df = pd.read_table(config["units"], comment="#").set_index(
 )
 SAMPLES = unit_df.index.unique()
 
-db_df = pd.read_table(DB + "/library.seqInfo.tsv").set_index(["assemblyId"], drop=False)
+db_df = pd.read_table(DB + "/library.seqInfo_bt2.tsv").set_index(["assemblyId"], drop=False)
 
 gen_df = pd.read_table(GENFILE, comment="#", header=None)
 GENERA = gen_df[[1]]
@@ -34,8 +33,8 @@ GENERA = gen_df[[1]]
 ## functions
 
 
-def get_mmi(wildcards):
-    return DB + "/" + db_df.loc[(wildcards.assembly), "mmi"]
+def get_bt2(wildcards):
+    return DB + "/" + db_df.loc[(wildcards.assembly), "bt2"]
 
 
 def get_fa(wildcards):
@@ -68,13 +67,11 @@ rule classify:
         "benchmarks/{sample}/classify.txt"
     log:
         "logs/{sample}/classify.log",
-    params:
-        sample="{sample}",
-    threads: 64
+    threads: 32
     shell:
         """     
-        (krakenuniq --db {DB} --preload-size {KRAKENUNIQ_MEMORY} --threads {threads} --only-classified-output --report-file report/{params.sample}.{PREFIX}.krakenuniq.report.tsv {input.fq} | gzip > {output.classify}) 2> {log}
-        gzip report/{params.sample}.{PREFIX}.krakenuniq.report.tsv
+        (krakenuniq --db {DB} --threads {threads} --only-classified-output --report-file report/{wildcards.sample}.{PREFIX}.krakenuniq.report.tsv {input.fq} | gzip > {output.classify}) 2> {log}
+        gzip report/{wildcards.sample}.{PREFIX}.krakenuniq.report.tsv
         """
 
 
@@ -88,7 +85,6 @@ rule classify_collect:
         """
         touch {output}
         """
-        
 
 rule get_genera_sample:
     input:
@@ -98,8 +94,6 @@ rule get_genera_sample:
         "taxlists/{sample}/genera.txt",
     wildcard_constraints:
         genus="\d+",
-    params:
-        sample="{sample}",
     shell:
         """
         (gzip -cd {input.reportfile} | mawk 'FNR==NR {{ a[$1]; next }} ($7 in a && $4 >= {KMERS}){{print $7"\\t"$9}}' <(cut -f1 {input.genfile}) -) > {output}
@@ -117,17 +111,15 @@ checkpoint get_assemblies_sample:
         tax_ids="taxlists/{sample}/assemblies/taxIds.txt",
         assembly_ids="taxlists/{sample}/assemblies/assemblyIds.txt",
         assembly_counts="taxlists/{sample}/assemblies/assemblyCounts.txt",
-    params:
-        sample="{sample}",
     shell:
         """
         gzip -cd {input.tax_ids} | mawk -F'\\t' 'FNR==NR {{ a[$1]; next }} ($2 in a)' <(cut -f1 {input.genfile}) - > {output.tax_ids}
         cat {input.seq_info} | mawk -F'\\t' 'FNR==NR {{ a[$4]; next }} ($2 in a){{print $1"\\t"$3"\\t"$5"\\t"$6}}' {output.tax_ids} - | sort > {output.assembly_ids}
-        gzip -cd {input.reportfile} | mawk 'FNR==NR {{ a[$4]; next }} ($7 in a && $8 == "assembly"){{print $9"\\t"$4}}' {output.tax_ids} - | sort > taxlists/{params.sample}/assemblies/assemblyCountsObs.txt
-        grep -vFwf <(cut -f1 taxlists/{params.sample}/assemblies/assemblyCountsObs.txt) taxlists/{params.sample}/assemblies/assemblyIds.txt  | mawk '{{print $1"\\t0"}}' > taxlists/{params.sample}/assemblies/assemblyCounts0.txt
-        cat taxlists/{params.sample}/assemblies/assemblyCountsObs.txt taxlists/{params.sample}/assemblies/assemblyCounts0.txt | sort > {output.assembly_counts}
-        join {output.assembly_ids} {output.assembly_counts} | sort -k3,3 -k2,2 -rnk5,5 | tr ' ' '\\t' | datamash -g2 first 1 first 3 | awk '{{print >"taxlists/{params.sample}/assemblies/"$3"."$2".id"}}'
-        cat taxlists/{params.sample}/assemblies/*.id | cut -f3 | sort | uniq | awk '{{print >"taxlists/{params.sample}/assemblies/"$1".genus"}}'
+        gzip -cd {input.reportfile} | mawk 'FNR==NR {{ a[$4]; next }} ($7 in a && $8 == "assembly"){{print $9"\\t"$4}}' {output.tax_ids} - | sort > taxlists/{wildcards.sample}/assemblies/assemblyCountsObs.txt
+        (grep -vFwf <(cut -f1 taxlists/{wildcards.sample}/assemblies/assemblyCountsObs.txt) taxlists/{wildcards.sample}/assemblies/assemblyIds.txt  | mawk '{{print $1"\\t0"}}' > taxlists/{wildcards.sample}/assemblies/assemblyCounts0.txt) || true
+        cat taxlists/{wildcards.sample}/assemblies/assemblyCountsObs.txt taxlists/{wildcards.sample}/assemblies/assemblyCounts0.txt | sort > {output.assembly_counts}
+        join {output.assembly_ids} {output.assembly_counts} | sort -k3,3 -k2,2 -rnk5,5 | tr ' ' '\\t' | datamash -g2 first 1 first 3 | awk '{{print >"taxlists/{wildcards.sample}/assemblies/"$3"."$2".id"}}'
+        cat taxlists/{wildcards.sample}/assemblies/*.id | cut -f3 | sort | uniq | awk '{{print >"taxlists/{wildcards.sample}/assemblies/"$1".genus"}}'
         """
 
 
@@ -200,59 +192,42 @@ rule get_reads_genus:
         """
 
 
-rule map_minimap2:
+rule map_bt2:
     input:
         fq="fq/{sample}/{genus}.fq.gz",
-        mmi=get_mmi,
     output:
         bam=temp(TMP_DIR + "/{sample}/{genus}.{assembly}.init.bam"),
     log:
-        "logs/{sample}/{genus}.{assembly}.map_minimap2.log",
+        "logs/{sample}/{genus}.{assembly}.map_bt2.log",
     benchmark:
-        "benchmarks/{sample}/{genus}.{assembly}.map_minimap2.txt"
+        "benchmarks/{sample}/{genus}.{assembly}.map_bt2.txt"
     wildcard_constraints:
         genus="\d+",
     threads: 4
     params:
-        rg="@RG\\tID:{genus}.{sample}\\tSM:{sample}",
+        bt2_idx=get_bt2,
     shell:
         """
-        (minimap2 -R '{params.rg}' -t {threads} {MM2_PARAM} -a {input.mmi} {input.fq} | samtools view -F4 -bh > {output.bam}) 2> {log}
+        (bowtie2 --threads {threads} {BT2_PARAM} -x {params.bt2_idx} -U {input.fq} --rg-id {wildcards.genus}.{wildcards.sample} --rg SM:{wildcards.sample} | samtools view -F4 -bh > {output.bam}) 2> {log}
         """
 
 
-rule sort_bam:
+rule sort_mrkdup_bam:
     input:
         bam=TMP_DIR + "/{sample}/{genus}.{assembly}.init.bam",
         fa=get_fa,
     output:
-        bam=temp(TMP_DIR + "/{sample}/{genus}.{assembly}.srt.bam"),
+        bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".mrkdup.bam",
     wildcard_constraints:
         genus="\d+",
+    log:
+        "logs/{sample}/{genus}.{assembly}.sort_rmdup.log",
+    benchmark:
+        "benchmarks/{sample}/{genus}.{assembly}.sort_markdup.txt"
     threads: 2
     shell:
         """
-        samtools sort -@{threads} {input.bam} | samtools calmd -b - {input.fa} > {output.bam}
-        """
-
-
-rule mark_duplicates:
-    input:
-        bam=TMP_DIR + "/{sample}/{genus}.{assembly}.srt.bam",
-    output:
-        bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".mrkdup.bam",
-        metrics="bam/{sample}/{genus}.{assembly}." + PREFIX + ".mrkdup.metrics.txt",
-    wildcard_constraints:
-        genus="\d+",
-    benchmark:
-        "benchmarks/{sample}/{genus}.{assembly}.mark_duplicates.txt"
-    log:
-        "logs/{sample}/{genus}.{assembly}.mark_duplicates.log",
-    threads:
-        4
-    shell:
-        """
-        picard -Xmx50g MarkDuplicates -I {input} -O {output.bam} -M {output.metrics} --TMP_DIR {TMP_DIR} 2> {log}
+        (samtools sort -@{threads} {input.bam} | samtools calmd -b - {input.fa} | samtools markdup -s - {output.bam}) 2> {log}
         """
 
 
@@ -416,12 +391,10 @@ rule summary_sample:
     output:
         tsv="tables/{sample}/" + PREFIX + ".summary.tsv.gz",
         stamp="stages/{sample}.summary.done",
-    params:
-        sample="{sample}",
     threads: 48
     shell:
         """
-        Rscript src/summary.R {PREFIX} {DB} {params.sample} {threads} {METADMG_CPP}
+        Rscript src/summary.R {PREFIX} {DB} {wildcards.sample} {threads} {METADMG_CPP}
         touch {output.stamp}
         """
 

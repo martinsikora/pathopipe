@@ -6,16 +6,14 @@ genera:
   targets.tsv
 db:
   /maps/projects/lundbeck/data/dbs/krakenuniq/hum_microbe
-krakenuniq_memory:
-  64G
 kmers:
-  50
+  150
 MQ:
   20
 tmp_dir:
   /dev/shm/pathopipe
-mm2_param:
-  "-x sr"
+bt2_param:
+  "-D 20 -R 3 -N 1 -L 20 -i S,1,0.50"
 targets_priority:
   targets_priority.tsv
 metaDMG-cpp:

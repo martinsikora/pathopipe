@@ -32,14 +32,14 @@ metaDMG <- args[5]
 
 registerDoParallel(threads)
 
-## helper, extract first field of prefix for matching in file name assemblyId parsing
+## extract first field of prefix for matching in file name assemblyId parsing
 prefix1 <- strsplit(prefix, "\\.") %>%
     map_chr(1)
 
-seqInfo <- read_tsv(
-    file = paste(dbPath, "/library.seqInfo.tsv", sep = ""),
+seqInfo <- read_tsv(paste(dbPath, "/library.seqInfo.tsv", sep = ""),
     col_types = "ccccccccdd"
 )
+
 
 ## ---------------------------------------------------------
 ## genome coverage summary
@@ -49,6 +49,7 @@ f1 <- list.files(
     pattern = "genomecov",
     full.names = TRUE
 )
+
 dGc <- foreach(ff = f1) %dopar% {
     r1 <- read_tsv(ff,
         col_type = "ciddd",
@@ -128,7 +129,11 @@ dGc <- foreach(ff = f1) %dopar% {
             filter(assemblyId == r2$assemblyId[1])
 
         r2$coveragePRatioCorr[idx] <- r2$coverageP[idx] / (r2$coveragePExp[idx] * s1$seqLMasked / s1$seqLTot)
-        select(r2, genusId, assemblyId, contigId, contigL, coverageAvg:coveragePRatio, coveragePRatioCorr, coverageCv:pContigsCovered)
+        select(
+            r2, genusId, assemblyId, contigId, contigL,
+            coverageAvg:coveragePRatio, coveragePRatioCorr,
+            coverageCv:pContigsCovered
+        )
     }
 }
 dGc <- bind_rows(dGc)
@@ -137,14 +142,19 @@ dGc <- bind_rows(dGc)
 ## ---------------------------------------------------------
 ## bam stats
 
+## relative entropy bin sizes
+binsize <- c(100, 1000)
+
+## bam files
 f1 <- list.files(
     path = paste("bam/", sampleId, sep = ""),
     pattern = "filter.bam$",
     full.names = TRUE
 )
+
 dBam <- foreach(ff = f1) %dopar% {
     p1 <- ScanBamParam(
-        what = c("rname", "mapq", "qwidth", "cigar"),
+        what = c("rname", "pos", "mapq", "qwidth", "cigar"),
         tag = c("NM"),
         flag = scanBamFlag(isDuplicate = FALSE)
     )
@@ -153,7 +163,8 @@ dBam <- foreach(ff = f1) %dopar% {
     if (length(r1[[1]]$rname) == 0) {
         NULL
     } else {
-        r2 <- as_tibble(r1[[1]][c("rname", "mapq", "qwidth", "cigar")]) %>%
+        r2 <- r1[[1]][c("rname", "pos", "mapq", "qwidth", "cigar")] %>%
+            as_tibble() %>%
             mutate(
                 nm = r1[[1]]$tag$NM,
                 rname = as.character(rname)
@@ -173,6 +184,96 @@ dBam <- foreach(ff = f1) %dopar% {
         r2 <- r2 %>%
             mutate(nSoftClip = r21)
 
+        ## calculate relative entropy for read start positions
+        hdr <- scanBamHeader(ff, what = "targets")
+
+        r31 <- map_dfr(binsize, ~ {
+
+            ## helpers
+            rr1 <- r2 %>%
+                select(rname, pos) %>%
+                group_by(rname) %>%
+                mutate(bpBin = as.character(pos %/% .x)) %>%
+                ungroup()
+
+            ## get max entropies per contig
+            nBins <- hdr[[1]]$targets %>%
+                as_tibble() %>%
+                mutate(
+                    nBins = case_when(
+                        value %/% .x == 0 ~ 1,
+                        TRUE ~ value %/% .x + 1
+                    ),
+                    rname = names(hdr[[1]]$targets)
+                )
+
+            rr21 <- rr1 %>%
+                count(rname) %>%
+                left_join(nBins, by = "rname")
+
+            rr22 <- map2_dfr(rr21$n, rr21$nBins, function(l, b) {
+                quotient <- l %/% b
+                remainder <- l %% b
+                fMax <- c(
+                    rep(quotient, b - remainder),
+                    rep(quotient + 1, remainder)
+                ) / l
+                tibble(entropyMax = -sum(fMax[fMax > 0] * log(fMax[fMax > 0], base = 2)))
+            }) %>%
+                mutate(rname = rr21$rname)
+
+            ## relative entropy per contig
+            rr23 <- rr1 %>%
+                count(rname, bpBin) %>%
+                group_by(rname) %>%
+                mutate(fBin = n / sum(n)) %>%
+                summarise(
+                    entropyObs = -sum(fBin * log(fBin, base = 2)),
+                    .groups = "drop"
+                
+                ) %>%
+                left_join(rr22, by = "rname") %>%
+                mutate(
+                    covPosRelEntropy = abs(entropyObs / entropyMax), ## take absolute value to avoid -0 entries in output table
+                    contigId = rname,
+                    binsize = .x
+                ) %>%
+                select(contigId, covPosRelEntropy, binsize)
+
+            ## relative entropy genome-wide
+            nBinsG <- sum(nBins$nBins)
+            nObs <- nrow(r2)
+            quotient <- nObs %/% nBinsG
+            remainder <- nObs %% nBinsG
+            fMax <- c(
+                rep(quotient, nBinsG - remainder),
+                rep(quotient + 1, remainder)
+            ) / nObs
+
+            rr24 <- rr1 %>%
+                count(rname, bpBin) %>%
+                mutate(fBin = n / sum(n)) %>%
+                summarise(
+                    entropyObs = -sum(fBin * log(fBin, base = 2)),
+                    entropyMax = -sum(fMax[fMax > 0] * log(fMax[fMax > 0], base = 2)),
+                    covPosRelEntropy = abs(entropyObs / entropyMax), ## take absolute value to avoid -0 entries in output table
+                    contigId = "genome"
+                ) %>%
+                mutate(
+                    binsize = .x
+                ) %>%
+                select(contigId, covPosRelEntropy, binsize)
+
+            bind_rows(rr23, rr24)
+        })
+
+        r32 <- r31 %>%
+            pivot_wider(
+                names_from = binsize,
+                values_from = covPosRelEntropy,
+                names_prefix = "covPosRelEntropy"
+            )
+
         ## generate final summary tibble
         r41 <- r2 %>%
             group_by(rname) %>%
@@ -184,7 +285,10 @@ dBam <- foreach(ff = f1) %dopar% {
                 editDistMode = nm[which.max(n)],
                 editDistAvg = sum(n * nm) / sum(n),
                 editDistAvgDecay = mean(diff(n)) / sum(n),
-                editDistDecayEnd = ifelse(is.na(which(diff(n) > 0)[1]), max(nm), which(diff(n) > 0)[1])
+                editDistDecayEnd = case_when(
+                    is.na(which(diff(n) > 0)[1]) ~ max(nm),
+                    TRUE ~ which(diff(n) > 0)[1]
+                )
             ) %>%
             ungroup()
         colnames(r41)[1] <- "contigId"
@@ -198,7 +302,10 @@ dBam <- foreach(ff = f1) %dopar% {
                 editDistMode = nm[which.max(n)],
                 editDistAvg = sum(n * nm) / sum(n),
                 editDistAvgDecay = mean(diff(n)) / sum(n),
-                editDistDecayEnd = ifelse(is.na(which(diff(n) > 0)[1]), max(nm), which(diff(n) > 0)[1])
+                editDistDecayEnd = case_when(
+                    is.na(which(diff(n) > 0)[1]) ~ max(nm),
+                    TRUE ~ which(diff(n) > 0)[1]
+                )
             ) %>%
             mutate(contigId = "genome")
         r41 <- bind_rows(r41, r411)
@@ -234,7 +341,10 @@ dBam <- foreach(ff = f1) %dopar% {
                 genusId = r5[1],
                 assemblyId = paste(r5[2:(idx - 1)], collapse = ".")
             ) %>%
-            select(genusId, assemblyId, contigId, nReads, editDistMode:ani)
+            left_join(r32,
+                by = "contigId"
+            ) %>%
+            select(genusId, assemblyId, everything())
         r6
     }
 }
@@ -265,15 +375,22 @@ dBam <- dBam %>%
 ## ---------------------------------------------------------
 ## damage
 
-hdr <- c("contigId", "nReads", "end", "pos", "AA", "AC", "AG", "AT", "CA", "CC", "CG", "CT", "GA", "GC", "GG", "GT", "TA", "TC", "TG", "TT")
+hdr <- c(
+    "contigId", "nReads", "end", "pos",
+    "AA", "AC", "AG", "AT",
+    "CA", "CC", "CG", "CT",
+    "GA", "GC", "GG", "GT",
+    "TA", "TC", "TG", "TT"
+)
+ct <- c("CC", "CA", "CG", "CT")
+ga <- c("GG", "GC", "GT", "GA")
 
 f1 <- list.files(
     path = paste("metadamage/", sampleId, sep = ""),
     pattern = "local.bdamage.gz$",
     full.names = TRUE
 )
-ct <- c("CC", "CA", "CG", "CT")
-ga <- c("GG", "GC", "GT", "GA")
+
 dDamage <- foreach(ff = f1) %dopar% {
     bam <- gsub(".local.bdamage.gz", ".bam", ff) %>%
         gsub("metadamage", "bam", .)
@@ -285,7 +402,9 @@ dDamage <- foreach(ff = f1) %dopar% {
         unlist()
 
     ## local DMG
-    p <- pipe(paste(metaDMG, " print -howmany 25 -bam ", bam, " ", ff, sep = ""))
+    p <- pipe(
+        paste(metaDMG, " print -howmany 25 -bam ", bam, " ", ff, sep = "")
+    )
     rL <- read_tsv(
         file = p,
         col_names = hdr,
@@ -294,7 +413,9 @@ dDamage <- foreach(ff = f1) %dopar% {
     )
 
     ## global DMG
-    p <- pipe(paste(metaDMG, " print -howmany 25 ", gsub("local", "global", ff), sep = ""))
+    p <- pipe(
+        paste(metaDMG, " print -howmany 25 ", gsub("local", "global", ff), sep = "")
+    )
     rG <- read_tsv(
         file = p,
         col_names = hdr,
@@ -350,11 +471,18 @@ dDamage <- bind_rows(dDamage)
 ## ---------------------------------------------------------
 ## krakenUniq results
 
-f1 <- paste("report/", sampleId, ".", prefix, ".krakenuniq.report.tsv.gz", sep = "")
+f1 <- paste(
+    "report/", sampleId, ".",
+    prefix, ".krakenuniq.report.tsv.gz",
+    sep = ""
+)
 
 r1 <- read_tsv(
     file = f1,
-    col_names = c("freq", "nClade", "nTaxon", "nKmer", "dup", "cov", "taxId", "taxRank", "name"),
+    col_names = c(
+        "freq", "nClade", "nTaxon", "nKmer",
+        "dup", "cov", "taxId", "taxRank", "name"
+    ),
     col_types = "ddddddccc",
     skip = 4
 )
@@ -370,7 +498,10 @@ dKraken <- r1 %>%
     ungroup() %>%
     select(taxId, nClade:kmerRank)
 
-colnames(dKraken) <- c("taxIdSpecies", "krakenNClade", "krakenNKmer", "krakenDupRate", "krakenKmerRank")
+colnames(dKraken) <- c(
+    "taxIdSpecies", "krakenNClade", "krakenNKmer",
+    "krakenDupRate", "krakenKmerRank"
+)
 
 
 ## ---------------------------------------------------------
@@ -384,35 +515,31 @@ res <- left_join(dGc, dBam, by = c("genusId", "assemblyId", "contigId")) %>%
     mutate(sampleId = sampleId, flag = "") %>%
     left_join(s1, by = "assemblyId") %>%
     left_join(dKraken) %>%
-    select(sampleId, genusId, taxIdSpecies, taxNameSpecies, assemblyId:dam3pAvgDecay, krakenNClade:krakenKmerRank, flag) %>%
+    select(sampleId, genusId, taxIdSpecies, taxNameSpecies, assemblyId:contigL, nReads, coverageAvg:coverageEvennessScore, covPosRelEntropy100, covPosRelEntropy1000, nContigs:dam3pAvgDecay, krakenNClade:krakenKmerRank, flag) %>%
     filter(!is.na(nReads))
 
-idx <- res$dam5p >= 0.1 & res$dam5pAvgDecay < 0
-idx1 <- res$aniRank100 < 2
-idx2 <- res$coveragePRatioCorr >= 0.8
+idx <- res$dam5p >= 0.05 & res$dam5pAvgDecay < 0
+idx1 <- res$ani >= 0.97
+idx2 <- res$covPosRelEntropy1000 >= 0.9
 idx3 <- res$krakenKmerRank < 2 & !is.na(res$krakenKmerRank)
 
-res$flag[idx] <- "damage_0.1"
-res$flag[idx1] <- "aniRank100_1"
-res$flag[idx2] <- "coveragePRatioCorr_0.8"
+res$flag[idx] <- "damage_0.05"
+res$flag[idx1] <- "ani_0.97"
+res$flag[idx2] <- "covPosRelEntropy1000_0.9"
 res$flag[idx3] <- "krakenKmerRank_1"
 
-res$flag[idx & idx1] <- "damage_0.1;aniRank100_1"
-res$flag[idx & idx2] <- "damage_0.1;coveragePRatioCorr_0.8"
-res$flag[idx & idx3] <- "damage_0.1;krakenKmerRank_1"
-res$flag[idx1 & idx2] <- "aniRank100_1;coveragePRatioCorr_0.8"
-res$flag[idx1 & idx3] <- "aniRank100_1;krakenKmerRank_1"
-res$flag[idx2 & idx3] <- "coveragePRatio_0.8;krakenKmerRank_1"
+res$flag[idx & idx1] <- "damage_0.05;ani_0.97"
+res$flag[idx & idx2] <- "damage_0.05;covPosRelEntropy1000_0.9"
+res$flag[idx & idx3] <- "damage_0.05;krakenKmerRank_1"
+res$flag[idx1 & idx2] <- "ani_0.97;covPosRelEntropy1000_0.9"
+res$flag[idx1 & idx3] <- "ani_0.97;krakenKmerRank_1"
+res$flag[idx2 & idx3] <- "covPosRelEntropy1000_0.9;krakenKmerRank_1"
 
-res$flag[idx & idx1 & idx2] <- "damage_0.1;aniRank100_1;coveragePRatioCorr_0.8"
-res$flag[idx & idx1 & idx3] <- "damage_0.1;aniRank100_1;krakenKmerRank_1"
-res$flag[idx & idx2 & idx3] <- "damage_0.1;coveragePRatioCorr_0.8;krakenKmerRank_1"
-res$flag[idx1 & idx2 & idx3] <- "aniRank100_1;coveragePRatioCorr_0.8;krakenKmerRank_1"
+res$flag[idx & idx1 & idx2] <- "damage_0.05;ani_0.97;covPosRelEntropy1000_0.9"
+res$flag[idx & idx1 & idx3] <- "damage_0.05;ani_0.97;krakenKmerRank_1"
+res$flag[idx & idx2 & idx3] <- "damage_0.05;covPosRelEntropy1000_0.9;krakenKmerRank_1"
+res$flag[idx1 & idx2 & idx3] <- "ani_0.97;covPosRelEntropy1000_0.9;krakenKmerRank_1"
 
-res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.1;aniRank100_1;coveragePRatioCorr_0.8;krakenKmerRank_1"
+res$flag[idx & idx1 & idx2 & idx3] <- "damage_0.05;ani_0.97;covPosRelEntropy1000_0.9;krakenKmerRank_1"
 
-write_tsv(
-    x = res,
-    file = paste("tables/", sampleId, "/", prefix, ".summary.tsv.gz", sep = ""),
-    na = "NaN"
-)
+write_tsv(res, file = paste("tables/", sampleId, "/", prefix, ".summary.tsv.gz", sep = ""), na = "NaN")
