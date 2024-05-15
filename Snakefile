@@ -303,7 +303,7 @@ rule sort_bam_metaDMG:
         bam="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam",
         bai="bam/{sample}/{genus}.{assembly}." + PREFIX + ".filter.bam.bai",
     output:
-        bam=TMP_DIR + "/{sample}/{genus}.{assembly}.filter.srt_name.bam",
+        bam=temp(TMP_DIR + "/{sample}/{genus}.{assembly}.filter.srt_name.bam"),
     wildcard_constraints:
         genus="\d+",
     shell:
