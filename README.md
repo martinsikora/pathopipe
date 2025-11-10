@@ -42,7 +42,36 @@ cd pathopipe
     - R package tidyverse (1.3.2)
     - R package inlabru (2.8.0)
     - R package Rsamtools (2.14.0)
-   
+
+If conda is pre-installed on your system, this can be conveniently installed in a conda (or mamba or similar) environment using the following:
+
+   ```
+    conda create -n pathopipe -c conda-forge -c bioconda -c defaults \
+      snakemake \
+      krakenuniq=1.0.4 \
+      mawk=1.3.4 \
+      seqtk=1.3 \
+      seqkit=2.3.0 \
+      bowtie2=2.5.2 \
+      samtools=1.17 \
+      picard=2.27.5 \
+      bedtools=2.30.0 \
+      datamash=1.5 \
+      snakemake=7.20.0 \
+      gargammel=1.1.4 \
+      metaDMG \
+      r-base=4.2.2 \
+      r-fasttopics=0.6_142 \
+      r-rbeast=0.9.7 \
+      r-tidyverse=1.3.2 \
+      r-inlabru=2.8.0 \
+      bioconductor-rsamtools=2.14.0
+   ```
+To load the conda environment before running the pipeline, use the following:
+   ```    
+    conda activate pathopipe
+   ```
+
 4. Download and unpack reference database:
    ```
    wget https://erda.ku.dk/archives/1d29e091b69cabe43093440eeb396212/diseases/public_supplementary_data_repo/hum_microbe_release_20250428.tar.gz
